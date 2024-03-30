@@ -22,6 +22,9 @@
         "stdlib.h": "c",
         "ctype.h": "c",
         "stdio.h": "c",
-        "esp_event.h": "c"
+        "esp_event.h": "c",
+        "esp_system.h": "c",
+        "nvs.h": "c",
+        "ota_modem.h": "c"
     }
 }

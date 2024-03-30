@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include <inttypes.h>
 
 #include <freertos/FreeRTOS.h>
@@ -16,24 +15,28 @@
 #include <time.h>
 #include <esp_timer.h>
 #include <esp_log.h>
-
+#include "esp_ota_ops.h"
 #include <nvs.h>
 #include <nvs_flash.h>
-#include <esp_spiffs.h>
-#include <dirent.h>
 
+#include <cJSON.h>
+
+/* main libraries */
 #include "credentials.h"
 #include "EG915_modem.h"
 #include "ota_modem.h"
 
 
+/* ota modem librarias */
 #include "crc.h"
 #include "ota_control.h"
 #include "ota_esp32.h"
 #include "ota_headers.h"
 
+/* ota ble librarias */
+#include "gap.h"
+#include "gatt_svr.h"
 
-#include <cJSON.h>
 
 /***********************************************
  * DEFINES
@@ -102,6 +105,11 @@ uint32_t current_time=0;
 
 /*--> MQTT CHARS <---*/
 int mqtt_idx = 0; 		// 0->5
+
+
+/*--> ble ota varibles<--*/
+bool ble_stopped = false; // Indicador de si el BLE está detenido
+
 
 /***********************************************
  * VARIABLES
@@ -293,11 +301,99 @@ int CheckRecMqtt(void){
     }
 	return 0;
 }
+/************************************************
+ * BLE CONTROLLERS (FUNCS AND TASK)
+*************************************************/
 
+void stop_ble() {
+  ESP_LOGI(TAG, " BLE STOPED");
+    if (!ota_updating) {
+        nimble_port_stop();
+        ble_stopped = true;
+    }
+}
+
+
+// Función para reiniciar el BLE
+void restart_ble() {
+    ESP_LOGI(TAG, " BLE RESTART");
+    
+    if (ble_stopped) {
+        nimble_port_init();
+        ble_hs_cfg.sync_cb = sync_cb;
+        ble_hs_cfg.reset_cb = reset_cb;
+        gatt_svr_init();
+        ble_svc_gap_device_name_set(device_name);
+        nimble_port_freertos_init(host_task);
+        ble_stopped = false;
+    }
+}
+
+// Tarea para controlar el ciclo de detención y reinicio del BLE
+void ble_control_task(void *pvParameter) {
+    ble_stopped = true;
+    restart_ble();
+    while (1) {
+        // Reiniciar ble por 5 min
+        // restart_ble();
+
+        // Detener ble por 1 minuto
+        // stop_ble(); 
+        printf("HOLA MUNDO \n");
+        vTaskDelay(60*1000 / portTICK_PERIOD_MS);
+    }
+}
+
+bool run_diagnostics() {
+    // Verificar si se realizó una actualización OTA correctamente
+    // Si no se detectó una actualización OTA, simplemente retornar verdadero
+    return true;
+}
 
 void app_main(void){
     ESP_LOGI(TAG, "--->> INIT PROJECT <<---");
 	int ret_main = 0;
+
+    const esp_partition_t *partition = esp_ota_get_running_partition();
+    switch (partition->address) {
+        case 0x00010000:
+        ESP_LOGI(TAG, "Running partition: factory");
+        break;
+        case 0x00110000:
+        ESP_LOGI(TAG, "Running partition: ota_0");
+        break;
+        case 0x00210000:
+        ESP_LOGI(TAG, "Running partition: ota_1");
+        break;
+        default:
+        ESP_LOGE(TAG, "Running partition: unknown");
+        break;
+    }
+
+    // check if an OTA has been done, if so run diagnostics
+    esp_ota_img_states_t ota_state;
+    if (esp_ota_get_state_partition(partition, &ota_state) == ESP_OK) {
+        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+        ESP_LOGI(TAG, "An OTA update has been detected.");
+        if (run_diagnostics()) {
+            ESP_LOGI(TAG,"Diagnostics completed successfully! Continuing execution.");
+            esp_ota_mark_app_valid_cancel_rollback();
+        } else {
+            ESP_LOGE(TAG,"Diagnostics failed! Start rollback to the previous version.");
+            esp_ota_mark_app_invalid_rollback_and_reboot();
+            esp_restart();
+        }
+        }
+    }
+    // Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
+
 
     main_cfg_parms();
     Modem_config();
@@ -355,5 +451,9 @@ void app_main(void){
   
     ret_sub = Modem_MqttCheck_SubData(mqtt_idx, status_buff);
     printf("ret_sub: %d\r\n",ret_sub);
+
+    // BLE CONTROL TASK
+    xTaskCreate(&ble_control_task, "BLE_Ctrl_Task", 1024*4, NULL, 5, NULL);
+  
 }
 
