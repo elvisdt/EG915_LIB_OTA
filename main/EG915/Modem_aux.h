@@ -20,5 +20,12 @@ void add_line(data_sms_strt_t* ds, const char* line);
 
 int str_to_data_sms(const char* input_string, data_sms_strt_t* data);
 
+void remove_spaces(char* str);
 
-#endif
+void remove_newlines(char* str);
+
+void str_to_lowercase(char *str);
+
+void str_to_uppercase(char *str);
+
+#endif /* _MODEM_AUX_H_ */

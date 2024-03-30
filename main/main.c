@@ -240,21 +240,16 @@ static void Modem_rx_task(void *pvParameters){
 int CheckRecMqtt(void){
 
     ESP_LOGI("MAIN-MQTT","<< Revisando conexion >>");
-
     static int num_max_check = 0;
     if (num_max_check >(MAX_ATTEMPS+2)){
         ESP_LOGE("MAIN-MQTT", "RESTART ESP32");
         esp_restart();
     }
-
-    
 	int ret_conn, ret_open;
     char IP_MQTT_AUX[20]={0};
     char PORT_MQTT_AUX[10]={0};
-
     ret_conn = Modem_CheckMqtt_Conn(mqtt_idx);
     printf("ret_conn: %d, num_max: %d\r\n", ret_conn, num_max_check);
-
     if (ret_conn<0){
         ret_open=Modem_CheckMqtt_Open(mqtt_idx,IP_MQTT_AUX,PORT_MQTT_AUX);
         if (ret_open<0){
@@ -298,6 +293,7 @@ int CheckRecMqtt(void){
 	return 0;
 }
 
+
 void app_main(void){
     ESP_LOGI(TAG, "--->> INIT PROJECT <<---");
 	int ret_main = 0;
@@ -322,8 +318,8 @@ void app_main(void){
     ESP_LOGI(TAG,"ICID: %s", data_modem.info.iccid);
     ESP_LOGI(TAG,"FIRMWARE: %s", data_modem.info.firmware);
     ESP_LOGI(TAG,"UNIX: %lld",data_modem.time);
-    ESP_LOGW(TAG,"CODE: %s", data_modem.code);
-	ESP_LOGW(TAG,"SIGNAL: %d", data_modem.signal);
+    ESP_LOGI(TAG,"CODE: %s", data_modem.code);
+	ESP_LOGI(TAG,"SIGNAL: %d", data_modem.signal);
     
     doc = cJSON_CreateObject();
     cJSON_AddItemToObject(doc,"imei",cJSON_CreateString(data_modem.info.imei));
@@ -344,14 +340,19 @@ void app_main(void){
     WAIT_S(2);
     // Registra la hora de inicio
     int64_t start_time, end_time, elapsed_time;
+    start_time = esp_timer_get_time();
+    CheckRecMqtt();
+    end_time = esp_timer_get_time();
+    elapsed_time = end_time - start_time;
+    ESP_LOGI("TIMER", "Tiempo de ejecución: %lld microsegundos", elapsed_time);
+    WAIT_S(2);
     
-    for (size_t i = 0; i < 10; i++){
-        start_time = esp_timer_get_time();
-        CheckRecMqtt();
-        end_time = esp_timer_get_time();
-        elapsed_time = end_time - start_time;
-        ESP_LOGI("TIMER", "Tiempo de ejecución: %lld microsegundos", elapsed_time);
-        WAIT_S(60);
-    }
+    int ret_sub;
+    //ret_sub= Modem_SubMqtt(mqtt_idx, "TEST/ID");
+    // printf("ret_sub: %d\r\n",ret_sub);
+    uint8_t status_buff[5] ={0};
+  
+    ret_sub = Modem_MqttCheck_SubData(mqtt_idx, status_buff);
+    printf("ret_sub: %d\r\n",ret_sub);
 }
 

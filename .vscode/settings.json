@@ -17,6 +17,10 @@
     "idf.toolsPathWin": "c:\\esp32\\.espressif",
     "files.associations": {
         "ota_headers.h": "c",
-        "time.h": "c"
+        "time.h": "c",
+        "string.h": "c",
+        "stdlib.h": "c",
+        "ctype.h": "c",
+        "stdio.h": "c"
     }
 }

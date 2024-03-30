@@ -198,9 +198,34 @@ int Modem_CheckMqtt_state(int idx);
 
 // Publicamos la data deseada en el broker
 int  Modem_PubMqtt_data(uint8_t * data,char * topic,int data_len, int id , int retain);
+
+/**
+ * @brief Suscribe un cliente MQTT a un tema específico.
+ *
+ * Esta función envía un comando AT al módem para suscribir al cliente MQTT
+ * identificado por el índice `idx` al tema especificado por `topic_name`.
+ *
+ * @param idx        Índice del cliente MQTT.
+ * @param topic_name Nombre del tema al que se suscribirá el cliente.
+ * @return Resultado de la suscripción:
+ *         0: Suscripción exitosa (OK).
+ *         1: Retransmisión del paquete.
+ *         2: Fallo en la suscripción.
+ *         Otro valor negativo en caso de error.
+ *
+ * @note Esta función utiliza comandos AT específicos del módem y está diseñada
+ * para trabajar con hardware y configuraciones específicas. Asegúrate de adaptar
+ * los parámetros y los mensajes de registro según tus necesidades.
+ */
+int Modem_SubMqtt(int idx, char* topic_name);
+
+int Modem_UnsubMqtt(int idx, char* topic_name);
+
+int Modem_MqttCheck_SubData(int idx, uint8_t status_buff[5]);
+
 int  Modem_sub_topic_json(int ID, char* topic_name, char* response);
                                                                                    
-int Modem_unsub_topic(int ID, char* topic_name);
+
 
 //=======================================================//
 int Modem_readSMS(char* mensaje, char *numero);

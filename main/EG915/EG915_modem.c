@@ -14,7 +14,7 @@
 #define WAIT_MS(x)		vTaskDelay(pdMS_TO_TICKS(x))
 #define WAIT_S(x)		vTaskDelay(pdMS_TO_TICKS(x*1e3))
 
-#define DEBUG_MODEM		0 // 0 -> NO DEBUG, 1-> DEBUG
+#define DEBUG_MODEM		1 // 0 -> NO DEBUG, 1-> DEBUG
 
 // Definimos las funciones en la libreria
 const char * TAG = "EG915";
@@ -753,18 +753,78 @@ int Modem_Mqtt_Disconnect(int idx){
 int  Modem_PubMqtt_data(uint8_t * data,char * topic,int data_len, int id , int retain){
 	int k = 0;
 	sprintf(buff_send,"AT+QMTPUBEX=%d,1,0,%d,\"%s\",%d\r\n",id,retain,topic,data_len);
-	//printf("Pub_msg=\n%s\n",buff_send);
 	sendAT(buff_send,">","ERROR",1000,buff_reciv);
-	vTaskDelay(50);
+	WAIT_MS(10);
 	uart_write_bytes(modem_uart.uart_num,data,data_len);
 	k = readAT("+QMT","ERROR",15000,buff_reciv);
 	WAIT_MS(500);
-	
-	//remove_spaces(buff_reciv);
+
 	printf("recib: %s \n", buff_reciv);
 	if(k != 1) return 0;
-
 	return 1;
+}
+
+
+int Modem_SubMqtt(int idx, char* topic_name){
+	ESP_LOGI(TAG, "--> MQTT SUBS TOPIC <--");
+	int ret = 0;
+	char res_esperada[30]={0};
+	sprintf(res_esperada,"+QMTSUB: %d,",idx);
+	sprintf(buff_send,"AT+QMTSUB=%d,1,\"%s\",0\r\n",idx,topic_name); 
+    ret = sendAT(buff_send,res_esperada,"ERROR\r\n",20000,buff_reciv);
+	if (ret ==1){
+		int result;
+		remove_spaces(buff_reciv);
+		ret = sscanf(buff_reciv,"+QMTSUB:%*d,%*d,%d,%*d", &result);
+		if (ret==1){
+			return result; //0:OK, 1:retransmision, 2:Faild 
+		}else{
+			ret = -2; //not found value
+		}
+	}else{
+		ret = -1;
+	}
+	return ret;
+}
+
+int Modem_MqttCheck_SubData(int idx, uint8_t status_buff[5]){
+	ESP_LOGI(TAG, "--> MQTT SUBS TOPIC <--");
+	int ret = 0;
+	char res_esperada[30]={0};
+	sprintf(res_esperada,"+QMTRECV: %d,",idx);
+    ret = sendAT("AT+QMTRECV?\r\n","OK\r\n","ERROR\r\n",20000,buff_reciv);
+	if (ret ==1){
+		if (strstr(buff_reciv,res_esperada)!=NULL){
+			int ss0,ss1,ss2,ss3,ss4;
+			remove_spaces(buff_reciv);
+			ret = sscanf(buff_reciv,"+QMTRECV:%*d,%d,%d,%d,%d,%d", &ss0,&ss1,&ss2,&ss3,&ss4);
+			if (ret==5){
+				status_buff[0] = ss0;
+				status_buff[1] = ss1;
+				status_buff[2] = ss2;
+				status_buff[3] = ss3;
+				status_buff[4] = ss3;
+				return 1; //0:OK 
+			}else{
+				ret = 2; //not subs to topic
+			}
+		}else{
+			ret = 0;
+		}
+	}else{
+		ret = -1;
+	}
+	return ret;
+}
+
+
+
+int Modem_UnsubMqtt(int idx, char* topic_name){
+	sprintf(buff_send,"AT+QMTUNS=%d,1,\"%s\"\r\n",idx, topic_name);
+	int a = sendAT(buff_send,"+QMTUNS:","ERROR",12000,buff_reciv);
+	printf("->%s\n",buff_reciv);
+	WAIT_MS(100);
+	return a;
 }
 
 int Modem_sub_topic_json(int ID, char* topic_name, char* response){
@@ -784,24 +844,15 @@ int Modem_sub_topic_json(int ID, char* topic_name, char* response){
 
 	// Si se encontró la llave
 	if(start != NULL){
-
 		char *data = strdup(start);
 		strcpy(response,data);
-
 		free(data);
 		return 1; // RESPUESTA OK
 	}
     return -1;
 }
 
-int Modem_unsub_topic(int ID, char* topic_name){
-	sprintf(buff_send,"AT+QMTUNS=%d,1,\"%s\"\r\n",ID, topic_name);
-	int a = sendAT(buff_send,"+QMTUNS:","ERROR",12000,buff_reciv);
-	printf("->%s\n",buff_reciv);
-	WAIT_MS(100);
 
-	return a;
-}
 
 /***************************************************************
  * SMS type
