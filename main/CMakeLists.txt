@@ -1,6 +1,5 @@
 set(srcs "main.c"
-         "ota_m95.c"
-          )
+         "ota_modem.c")
 
 set(ota_srcs  
     "OTA/crc.c"

@@ -1041,7 +1041,6 @@ uint8_t OTA(uint8_t *buff, uint8_t *inicio, uint8_t *fin, uint32_t len){
     const char *TAG = "OTA";
     if (*inicio) { //If it's the first packet of OTA since bootup, begin OTA
         ESP_LOGI(TAG,"BeginOTA");
-        //Serial.println("BeginOTA");
         const esp_task_wdt_config_t config_wd = {
                 .timeout_ms = 20,
                 .idle_core_mask = 0,
@@ -1065,14 +1064,12 @@ uint8_t OTA(uint8_t *buff, uint8_t *inicio, uint8_t *fin, uint32_t len){
             };
             esp_task_wdt_init(&config_wd);
             ESP_LOGI(TAG,"EndOTA");
-            //Serial.println("EndOTA");
             if (ESP_OK == esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL))) {
                 vTaskDelay(2000 / portTICK_PERIOD_MS);
                 esp_restart();
             }
             else {
                 ESP_LOGI(TAG,"Upload Error");
-                //Serial.println("Upload Error");
             }
         }
 

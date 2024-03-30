@@ -8,8 +8,9 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <esp_event.h>
 
-#include "esp_system.h"
+#include <esp_system.h>
 #include <sdkconfig.h>
 #include <sys/time.h>
 #include <time.h>
@@ -23,7 +24,7 @@
 
 #include "credentials.h"
 #include "EG915_modem.h"
-#include "ota_m95.h"
+#include "ota_modem.h"
 
 
 #include "crc.h"
@@ -196,7 +197,7 @@ void OTA_check(void){
 			ESP_LOGI(TAG_OTA,"Iniciando OTA");
 			printf("WTD desactivado\r\n");
 			watchdog_en=0;
-			if(ota_uartControl_M95() == OTA_EX_OK){
+			if(Ota_UartControl_Modem() == OTA_EX_OK){
 			  debug_ota("main> OTA m95 Correcto...\r\n");
 			  esp_restart();
 			}else{

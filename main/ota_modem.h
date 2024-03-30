@@ -5,8 +5,8 @@
  *      Author: Franco
  */
 
-#ifndef OTA_INC_OTA_USB_H_
-#define OTA_INC_OTA_USB_H_
+#ifndef _OTA_INC_OTA_USB_H_
+#define _OTA_INC_OTA_USB_H_
 
 
 #include <stdbool.h>
@@ -22,14 +22,14 @@
   Punto de acceso al proceso OTA desde el programa principal.
   * bucle que lee espera cada mensaje ota.
 */
-OTA_EX_ ota_uartControl_M95(void);
+OTA_EX_ Ota_UartControl_Modem(void);
 
 /*
   Lee los mensajes OTA
 */
-uint16_t ota_uart_read_M95( uint8_t *data, uint16_t max_len);
+uint16_t Ota_UartRead_Modem( uint8_t *data, uint16_t max_len);
 
-OTA_EX_ ota_uart_send_resp_M95(uint8_t ans);
+OTA_EX_ Ota_UartSend_Resp_Modem(uint8_t ans);
 
 
 #endif /* OTA_INC_OTA_USB_H_ */

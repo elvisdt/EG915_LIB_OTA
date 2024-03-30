@@ -21,6 +21,7 @@
         "string.h": "c",
         "stdlib.h": "c",
         "ctype.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "esp_event.h": "c"
     }
 }

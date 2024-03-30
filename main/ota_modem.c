@@ -5,19 +5,19 @@
  *      Author: Franco
  */
 
-#include "ota_m95.h"
+#include "ota_modem.h"
 
 #define DEBUG_PRINT_DATA 0 /*0 DISABLE, 1: ENABLE*/
 
 static uint8_t Rx_Buffer[ OTA_PACKET_MAX_SIZE ];
 
-OTA_EX_ ota_uartControl_M95(void){
+OTA_EX_ Ota_UartControl_Modem(void){
   uint16_t  ret = OTA_EX_OK;
   uint16_t len;
   ota_init();
   debug_ota("Init");
   do{
-      len = ota_uart_read_M95( Rx_Buffer, OTA_PACKET_MAX_SIZE );
+      len = Ota_UartRead_Modem( Rx_Buffer, OTA_PACKET_MAX_SIZE );
       if( len != 0u ){
         ret = ota_flash( Rx_Buffer, len );
       }else{
@@ -26,12 +26,12 @@ OTA_EX_ ota_uartControl_M95(void){
 
       if( ret != OTA_EX_OK ){
         debug_ota("ota_m95> ERROR, Sending NACK\r\n");
-        ota_uart_send_resp_M95( OTA_NACK);
+        Ota_UartSend_Resp_Modem( OTA_NACK);
         break;
       }
       else{
         debug_ota("ota_m95> OK, Sending ACK\r\n");
-        ota_uart_send_resp_M95( OTA_ACK);
+        Ota_UartSend_Resp_Modem( OTA_ACK);
       }
 
   }while( ota_d.ota_state != OTA_STATE_IDLE);
@@ -40,7 +40,7 @@ OTA_EX_ ota_uartControl_M95(void){
 
 
 
-uint16_t ota_uart_read_M95( uint8_t *data, uint16_t max_len){
+uint16_t Ota_UartRead_Modem( uint8_t *data, uint16_t max_len){
   //int16_t  ret;
   uint16_t index   =  0u;
   //uint16_t data_len;
@@ -110,7 +110,7 @@ uint16_t ota_uart_read_M95( uint8_t *data, uint16_t max_len){
 }
 
 
-OTA_EX_ ota_uart_send_resp_M95(uint8_t ans){
+OTA_EX_ Ota_UartSend_Resp_Modem(uint8_t ans){
   OTA_RESP_ rsp =
   {
     .sof         = OTA_SOF,
