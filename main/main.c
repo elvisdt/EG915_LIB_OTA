@@ -25,6 +25,7 @@
 #include "credentials.h"
 #include "EG915_modem.h"
 #include "ota_modem.h"
+#include "main.h"
 
 
 /* ota modem librarias */
@@ -48,16 +49,13 @@
 #define WAIT_MS(x)		vTaskDelay(pdMS_TO_TICKS(x))
 #define WAIT_S(x)		vTaskDelay(pdMS_TO_TICKS(x*1e3))
 
+#define MASTER_TOPIC_MQTT   "OTA"
+
 /***********************************************
  * STRUCTURES
 ************************************************/
 
-struct modem_gsm{
-    EG915_info_t info;  
-    char         code[10];
-	int          signal;
-	time_t       time;
-};
+
 
 /***********************************************
  * VARIABLES
@@ -72,10 +70,9 @@ int end_task_uart_m95;
 
 
 /*---> Task Handle <---*/
-TaskHandle_t MAIN_task_handle    	=   NULL;
 TaskHandle_t UART_task_handle    	=   NULL;
+TaskHandle_t MAIN_task_handle    	=   NULL;
 TaskHandle_t BLE_Task_handle        =   NULL;
-TaskHandle_t MODEM_event_handle     =   NULL;
 
 
 /*---> Data OTA Output <---*/
@@ -89,7 +86,7 @@ char* buff_aux=(char*)aux_buff_mem;
 
 
 /*---> data structure for modem <---*/
-static struct modem_gsm data_modem={0};
+static modem_gsm_t data_modem={0};
 static int ret_update_time =0;
 
 
@@ -110,6 +107,10 @@ int mqtt_idx = 0; 		// 0->5
 /*--> ble ota varibles<--*/
 bool ble_stopped = false; // Indicador de si el BLE está detenido
 
+
+/*--> global main variables <--*/
+uint32_t Info_time=5;
+uint32_t OTA_md_time=1;
 
 /***********************************************
  * VARIABLES
@@ -145,85 +146,93 @@ int Init_config_modem(){
     int state = 0;
     for (size_t i = 0; i < MAX_ATTEMPS; i++){
         state  = Modem_turn_ON();
-        if (state ==0){
+        if (state !=MD_CFG_SUCCESS){
             Modem_turn_OFF();
             WAIT_S(3);
         }else{
             break;
         }
     }
-    
-    if(state != 1) return state;
+
+    if(state != MD_CFG_SUCCESS) return state;
 
     for (size_t i = 0; i < MAX_ATTEMPS; i++){
         WAIT_S(2);
         state  = Modem_begin_commands();
-        if (state ==1){
-            break;
+        if (state ==MD_AT_OK){
+            return MD_CFG_SUCCESS;
         }
     }
-	return state;
+	return MD_CFG_FAIL;
 }
 
 int Active_modem(){
-	int status = 0;
-	status = Init_config_modem();
-	if (status){
+	int status = Init_config_modem();
+	if (status == MD_CFG_SUCCESS){
         int status = Modem_get_dev_info(&data_modem.info);
-        if(status !=1 ){
-            return 0;   // FAIL
+        if(status ==MD_CFG_SUCCESS){
+            return MD_CFG_SUCCESS;   // FAIL
         }
     }
-	return status;
+	return MD_CFG_FAIL;
 }
 
-void OTA_check(void){
-  char buffer[700] ="";
-  static const char *TAG_OTA = "OTA_task";
-  esp_log_level_set(TAG_OTA, ESP_LOG_INFO);
+/**
+ * @brief Checks for OTA (Over-The-Air) updates.
+ *
+ * This function establishes a connection to an OTA server, sends device information,
+ * and waits for a response. If an OTA update is pending (indicated by the response),
+ * it initiates the OTA process.
+ *
+ * @note The specific details such as 'ip_OTA', 'port_OTA', and custom functions are
+ * application-specific and should be defined elsewhere in your code.
+ */
+void OTA_Modem_Check(void){
 
-  printf("OTA:Revisando conexion...\r\n");
-  do{
-	  if(!TCP_open(ip_OTA, port_OTA)){
-		ESP_LOGI(TAG_OTA,"No se conecto al servidor");
-		TCP_close();
-		printf("OTA:Desconectado\r\n");
-		break;
-	  }
+    static const char *TAG_OTA = "OTA_MD";
+    esp_log_level_set(TAG_OTA, ESP_LOG_INFO);
 
-	  printf("OTA:Solicitando actualizacion...\r\n");
-	  if(TCP_send(output, strlen(output))){                           // 1. Se envia la info del dispositivo
-		printf("OTA:Esperando respuesta...\r\n");
-		int ret_ota = readAT("}\r\n", "-8/()/(\r\n",10000,buffer);   // 2. Se recibe la 1ra respuesta con ota True si tiene un ota pendiente... (el servidor lo envia justo despues de recibir la info)(}\r\n para saber cuando llego la respuesta)
-        if(ret_ota ==0){
-            printf("OTA: no answer\r\n");
+    ESP_LOGI(TAG_OTA,"<===> MODEM OTA CHECK <===>");
+    char buffer[500] ="";
+    do{
+        if(TCP_open(ip_OTA, port_OTA)!=MD_TCP_OPEN_OK){
+            ESP_LOGW(TAG_OTA,"Not connect to the Server");
+            TCP_close();
             break;
         }
-
-        debug_ota("main> repta %s\r\n", buffer);
-		if(strstr(buffer,"\"ota\": \"true\"") != 0x00){
-			ESP_LOGI(TAG_OTA,"Iniciando OTA");
-			printf("WTD desactivado\r\n");
-			watchdog_en=0;
-			if(Ota_UartControl_Modem() == OTA_EX_OK){
-			  debug_ota("main> OTA m95 Correcto...\r\n");
-			  esp_restart();
-			}else{
-			  debug_ota("main> OTA m95 Error...\r\n");
-			}
-			current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
-			watchdog_en=1;
-			printf("Watchdog reactivado\r\n");
-		}
-		printf("OTA:No hubo respuesta\r\n");
-	  }
-	}
-	while(false);
-    
+        ESP_LOGI(TAG_OTA,"Requesting update...");
+        if(TCP_send(output, strlen(output))==MD_TCP_SEND_OK){                           // 1. Se envia la info del dispositivo
+            ESP_LOGI(TAG_OTA,"Waiting for response...");
+            int ret_ota = readAT("}\r\n", "-8/()/(\r\n",10000,buffer);   // 2. Se recibe la 1ra respuesta con ota True si tiene un ota pendiente... (el servidor lo envia justo despues de recibir la info)(}\r\n para saber cuando llego la respuesta)
+            if(ret_ota ==0){
+                ESP_LOGW(TAG_OTA,"There was no answer");
+                break;
+            }
+            debug_ota("main> repta %s\r\n", buffer);
+            if(strstr(buffer,"\"ota\": \"true\"") != 0x00){
+                ESP_LOGI(TAG_OTA,"Start OTA download");
+                ESP_LOGW(TAG_OTA,"WDT deactivate");
+                watchdog_en=0;
+                if(Ota_UartControl_Modem() == OTA_EX_OK){
+                    ESP_LOGI(TAG_OTA,"OTA UPDATE SUCCESFULL, RESTART");
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    esp_restart();
+                }else{
+                    ESP_LOGW(TAG_OTA,"FAIL OTA UPDATE");
+                }
+                current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+                watchdog_en=1;
+                ESP_LOGW(TAG_OTA,"WDT reactivate");
+            }
+        }
+    }while(false);
     return;
 }
 
-/*---> TASK MODEM UART<---*/
+/***********************************************
+ * MODEM UART TASK
+************************************************/
+
 static void Modem_rx_task(void *pvParameters){
     uart_event_t event;
     uint8_t* dtmp = (uint8_t*) malloc(RD_BUF_SIZE);
@@ -247,60 +256,58 @@ static void Modem_rx_task(void *pvParameters){
 
 
 int CheckRecMqtt(void){
-
-    ESP_LOGI("MAIN-MQTT","<< Revisando conexion >>");
+    ESP_LOGI("MAIN-MQTT","<<---->> Revisando conexion <<--->>");
     static int num_max_check = 0;
+    static int ret_conn=0;
+    static int ret_open=0;
+
     if (num_max_check >(MAX_ATTEMPS+2)){
         ESP_LOGE("MAIN-MQTT", "RESTART ESP32");
         esp_restart();
     }
-	int ret_conn, ret_open;
-    char IP_MQTT_AUX[20]={0};
-    char PORT_MQTT_AUX[10]={0};
-    ret_conn = Modem_CheckMqtt_Conn(mqtt_idx);
-    printf("ret_conn: %d, num_max: %d\r\n", ret_conn, num_max_check);
-    if (ret_conn<0){
-        ret_open=Modem_CheckMqtt_Open(mqtt_idx,IP_MQTT_AUX,PORT_MQTT_AUX);
-        if (ret_open<0){
+    printf("num_max: %d\r\n", num_max_check);
+
+    ret_conn = Modem_Mqtt_CheckConn(mqtt_idx);
+    printf("ret_conn: %d\r\n", ret_conn);
+    if (ret_conn == MD_MQTT_CONN_ERROR){
+        ret_open=Modem_Mqtt_CheckOpen(mqtt_idx,ip_MQTT, port_MQTT);
+        printf("ret_open: %d\r\n",ret_open);
+        if (ret_open == MD_CFG_FAIL){
             num_max_check ++;
-            CheckRecMqtt(); // CHECK AGAIN 
-        }else if (ret_open==0){
-             num_max_check ++;
+        }else if (ret_open==MD_MQTT_IS_OPEN){
+            //Conectamos son nuesto indice e imei
+            Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
+        }else if (ret_open==MD_MQTT_NOT_OPEN){
+            num_max_check ++;
+            // Configurar y Abrir  MQTT
             ret_open=Modem_Mqtt_Open(mqtt_idx,ip_MQTT,port_MQTT);
-            if (ret_open == 0){
+            if (ret_open == MD_MQTT_OPEN_OK){
+                // Abrir comunicacion 
                 Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
-            }else if (ret_open>0){
+            }else{
                 WAIT_S(2);
+                // desconectar y cerrar en caso exista alguna comunicacion
                 Modem_Mqtt_Disconnect(mqtt_idx);
                 Modem_Mqtt_Close(mqtt_idx);
-                ret_open=Modem_Mqtt_Open(mqtt_idx,ip_MQTT,port_MQTT);
             }
-            printf("ret_open: %d\r\n",ret_open);
-            CheckRecMqtt(); // CHECK AGAIN 
-        }else if (ret_open==1){
-            num_max_check ++;
-            Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
-            CheckRecMqtt(); // CHECK AGAIN
-        }else{
-            CheckRecMqtt(); // CHECK AGAIN
         }
-    }else if (ret_conn== 1){
-        WAIT_S(2);
+        CheckRecMqtt(); // Volvemos a verificar la conexion
+    }else if (ret_conn==MD_MQTT_CONN_INIT || ret_conn == MD_MQTT_CONN_DISCONNECT){
+        WAIT_S(1);
         Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
         CheckRecMqtt();  // CHECK AGAIN
-    }else if (ret_conn==2){
-        WAIT_S(2);
+    }else if (ret_conn==MD_MQTT_CONN_CONNECT){
+        WAIT_S(1);
         CheckRecMqtt();  // CHECK AGAIN
-    }else if (ret_conn == 3){
-        // CONNECT IS SUCCESFULL
+    }else if (ret_conn==MD_MQTT_CONN_OK){
         num_max_check = 0;
-        return 1;
-    }else if (ret_conn == 4){
-        Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
-        CheckRecMqtt();  // CHECK AGAIN
+        ESP_LOGI("MAIN-MQTT","CONNECT SUCCESFULL");
     }
-	return 0;
+
+    printf("ret conn: %d\r\n",ret_conn);
+	return ret_conn;
 }
+
 /************************************************
  * BLE CONTROLLERS (FUNCS AND TASK)
 *************************************************/
@@ -312,7 +319,6 @@ void stop_ble() {
         ble_stopped = true;
     }
 }
-
 
 // Función para reiniciar el BLE
 void restart_ble() {
@@ -330,7 +336,7 @@ void restart_ble() {
 }
 
 // Tarea para controlar el ciclo de detención y reinicio del BLE
-void ble_control_task(void *pvParameter) {
+static void ble_control_task(void *pvParameter) {
     ble_stopped = true;
     restart_ble();
     while (1) {
@@ -350,6 +356,87 @@ bool run_diagnostics() {
     return true;
 }
 
+/**********************************************
+ * MAIN TASK CONTROL AND FUNCS
+***********************************************/
+void Info_Send(void){
+    ESP_LOGI("MQTT-INFO","<-- Send device info -->");
+
+
+	static char topic[60]="";
+	sprintf(topic,"%s/%s/INFO",MASTER_TOPIC_MQTT,data_modem.info.imei);
+
+	time(&data_modem.time);
+	data_modem.signal = Modem_get_signal();
+	
+	modem_info_to_json(data_modem, buff_aux);
+
+	int ret_check =  CheckRecMqtt();
+    ESP_LOGI("MQTT-INFO","ret-conn: %d",ret_check);
+	if(ret_check ==MD_MQTT_CONN_OK){
+		ret_check = Modem_Mqtt_Pub(buff_aux,topic,strlen(buff_aux),mqtt_idx, 0);
+        ESP_LOGI("MQTT-INFO","ret-pubb:%d",ret_check);
+	}
+	
+    return;
+}
+
+/*
+    current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+    // OTA_Mode_Check();
+    WAIT_S(2);
+    // Registra la hora de inicio
+    int64_t start_time, end_time, elapsed_time;
+    start_time = esp_timer_get_time();
+    CheckRecMqtt();
+    end_time = esp_timer_get_time();
+    elapsed_time = end_time - start_time;
+    ESP_LOGI("TIMER", "Tiempo de ejecución: %lld microsegundos", elapsed_time);
+    WAIT_S(2);
+
+     int ret_sub;
+    ret_sub= Modem_SubMqtt(mqtt_idx, "TEST/ID");
+    printf("ret_sub: %d\r\n",ret_sub);
+*/
+
+static void Main_Task(void* pvParameters){
+    WAIT_S(3);
+	for(;;){
+		current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+		if (current_time%30==0){
+			printf("Tiempo: %lu\r\n",current_time);
+		}
+
+		if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= Info_time){
+			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+			Info_time+= 3*60;// cada 5 min
+			if(ret_update_time!=1){
+			    ret_update_time=Modem_update_time(1);
+			    vTaskDelay(100);
+			}
+            Info_Send();
+		}
+        if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= OTA_md_time){
+			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+			OTA_md_time += 60;
+			// OTA_Modem_Check();
+			printf("Siguiente ciclo en 60 segundos\r\n");
+			printf("OTA CHECK tomo %lu segundos\r\n",(pdTICKS_TO_MS(xTaskGetTickCount())/1000-current_time));
+
+			vTaskDelay(100);
+		}
+		if(Modem_check_AT()!=MD_AT_OK){
+			WAIT_S(2);
+            if(Modem_check_AT()!=MD_AT_OK){
+				Active_modem();
+			}
+		}
+		WAIT_S(1);
+	}
+	vTaskDelete(NULL);
+}
+
+
 void app_main(void){
     ESP_LOGI(TAG, "--->> INIT PROJECT <<---");
 	int ret_main = 0;
@@ -357,16 +444,16 @@ void app_main(void){
     const esp_partition_t *partition = esp_ota_get_running_partition();
     switch (partition->address) {
         case 0x00010000:
-        ESP_LOGI(TAG, "Running partition: factory");
-        break;
+            ESP_LOGI(TAG, "Running partition: factory");
+            break;
         case 0x00110000:
-        ESP_LOGI(TAG, "Running partition: ota_0");
-        break;
+            ESP_LOGI(TAG, "Running partition: ota_0");
+            break;
         case 0x00210000:
-        ESP_LOGI(TAG, "Running partition: ota_1");
-        break;
+            ESP_LOGI(TAG, "Running partition: ota_1");
+            break;
         default:
-        ESP_LOGE(TAG, "Running partition: unknown");
+            ESP_LOGE(TAG, "Running partition: unknown");
         break;
     }
 
@@ -374,39 +461,41 @@ void app_main(void){
     esp_ota_img_states_t ota_state;
     if (esp_ota_get_state_partition(partition, &ota_state) == ESP_OK) {
         if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
-        ESP_LOGI(TAG, "An OTA update has been detected.");
-        if (run_diagnostics()) {
-            ESP_LOGI(TAG,"Diagnostics completed successfully! Continuing execution.");
-            esp_ota_mark_app_valid_cancel_rollback();
-        } else {
-            ESP_LOGE(TAG,"Diagnostics failed! Start rollback to the previous version.");
-            esp_ota_mark_app_invalid_rollback_and_reboot();
-            esp_restart();
-        }
+            ESP_LOGI(TAG, "An OTA update has been detected.");
+            if (run_diagnostics()) {
+                ESP_LOGI(TAG,"Diagnostics completed successfully! Continuing execution.");
+                esp_ota_mark_app_valid_cancel_rollback();
+            } else {
+                ESP_LOGE(TAG,"Diagnostics failed! Start rollback to the previous version.");
+                esp_ota_mark_app_invalid_rollback_and_reboot();
+            }
         }
     }
-    // Initialize NVS
+
+    /*--- Initialize NVS ---*/
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-
-
-
+    
+    // Init Modem params
     main_cfg_parms();
     Modem_config();
+
+    // INIT OTA BLE 
     xTaskCreate(Modem_rx_task, "M95_rx_task", 1024*4, NULL, configMAX_PRIORITIES -1,&UART_task_handle);    // active service
+    xTaskCreate(ble_control_task, "BLE_Ctrl_Task", 1024*4, NULL, configMAX_PRIORITIES-2,&BLE_Task_handle);
 
     ret_main = Active_modem();
-    if(ret_main != 1) esp_restart();
+    if(ret_main != MD_CFG_SUCCESS) esp_restart();
+
 	ESP_LOGI(TAG,"-->> END CONFIG <<--\n");
 
     ret_update_time=Modem_update_time(3);
     ESP_LOGI(TAG, "RET update time: %d",ret_update_time);
     time(&data_modem.time);
-    
     data_modem.signal = Modem_get_signal();
     strcpy(data_modem.code,PROJECT_VER);
 
@@ -432,28 +521,13 @@ void app_main(void){
     printf(output);
     printf("\r\n");
 
-    current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
-    // OTA_check();
-    WAIT_S(2);
-    // Registra la hora de inicio
-    int64_t start_time, end_time, elapsed_time;
-    start_time = esp_timer_get_time();
-    CheckRecMqtt();
-    end_time = esp_timer_get_time();
-    elapsed_time = end_time - start_time;
-    ESP_LOGI("TIMER", "Tiempo de ejecución: %lld microsegundos", elapsed_time);
-    WAIT_S(2);
-    
-    int ret_sub;
-    //ret_sub= Modem_SubMqtt(mqtt_idx, "TEST/ID");
-    // printf("ret_sub: %d\r\n",ret_sub);
-    uint8_t status_buff[5] ={0};
-  
-    ret_sub = Modem_MqttCheck_SubData(mqtt_idx, status_buff);
-    printf("ret_sub: %d\r\n",ret_sub);
+	OTA_md_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000+60;
+	Info_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+	current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
 
-    // BLE CONTROL TASK
-    xTaskCreate(&ble_control_task, "BLE_Ctrl_Task", 1024*4, NULL, 5, NULL);
-  
+
+    
+    xTaskCreate(Main_Task,"M95_Task",6144,NULL,10,&MAIN_task_handle);
+    
 }
 

@@ -4,7 +4,7 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-set(PROJECT_VER "1.1")  
+set(PROJECT_VER "1.2")  
 add_definitions(-DPROJECT_VER="${PROJECT_VER}")
 set(PROJECT_NAME "EG915-MODEM")  
 add_definitions(-DPROJECT_NAME="${PROJECT_NAME}")

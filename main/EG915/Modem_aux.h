@@ -28,4 +28,9 @@ void str_to_lowercase(char *str);
 
 void str_to_uppercase(char *str);
 
+int find_phone_and_extract(const char* input_string, char* phone);
+
+/*-------------------------------------*/
+int remove_word_from_string(char *input_string, const char *target);
+
 #endif /* _MODEM_AUX_H_ */

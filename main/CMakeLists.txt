@@ -1,5 +1,6 @@
 set(srcs "main.c"
-         "ota_modem.c")
+         "ota_modem.c"
+         "json_parser.c")
 
 set(ota_modem_srcs  
     "OTA_MODEM/crc.c"
@@ -14,7 +15,7 @@ set(ota_ble_srcs
 
 set(EG915_srcs  
     "EG915/EG915_modem.c"
-    "EG915/Modem_aux.c")
+    "EG915/modem_aux.c")
 
 
 idf_component_register(
