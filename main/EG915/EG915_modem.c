@@ -950,7 +950,6 @@ int TCP_open(char *ip_tcp, char *port_tcp){
 	char *result = strstr(buff_reciv, res_esperada);
 	if (result != NULL){
 		remove_spaces(result);
-		printf("result: %s\n\r",result);
 		int val=-1;
 		if (sscanf(result,"+QIOPEN:%*d,%d",&val)==1){
 			if(val==0){
@@ -987,8 +986,8 @@ int TCP_send(char *msg, uint8_t len){
 }
 
 int TCP_close(){
-    
-	int ret = sendAT("AT+QICLOSE=0\r\n","OK\r\n","ERROR\r\n",25500,buff_reciv);
+    ESP_LOGI(TAG,"==>> CLOSE TCP");
+	int ret = sendAT("AT+QICLOSE=0\r\n","OK\r\n","ERROR\r\n",20000,buff_reciv);
 	WAIT_MS(100);
 
 	if(ret != MD_AT_OK){

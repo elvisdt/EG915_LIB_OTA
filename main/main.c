@@ -220,6 +220,8 @@ void OTA_Modem_Check(void){
                 watchdog_en=1;
                 ESP_LOGW(TAG_OTA,"WDT reactivate");
             }
+            int ret_tcp=TCP_close(); // close tcp
+            printf("ret : 0x%x\r\n",ret_tcp);
         }
     }while(false);
     return;
@@ -366,10 +368,10 @@ void Info_Send(void){
 	modem_info_to_json(data_modem, buff_aux);
 
 	int ret_check =  CheckRecMqtt();
-    ESP_LOGI("MQTT-INFO","ret-conn: %d",ret_check);
+    ESP_LOGI("MQTT-INFO","ret-conn: 0x%X",ret_check);
 	if(ret_check ==MD_MQTT_CONN_OK){
 		ret_check = Modem_Mqtt_Pub(buff_aux,topic,strlen(buff_aux),mqtt_idx, 0);
-        ESP_LOGI("MQTT-INFO","ret-pubb:%X",ret_check);
+        ESP_LOGI("MQTT-INFO","ret-pubb: 0x%X",ret_check);
 	}
 	
     return;
@@ -377,7 +379,7 @@ void Info_Send(void){
 
 /*
     current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
-    // OTA_Mode_Check();
+    // OTA_Modem_Check();
     WAIT_S(2);
     // Registra la hora de inicio
     int64_t start_time, end_time, elapsed_time;
