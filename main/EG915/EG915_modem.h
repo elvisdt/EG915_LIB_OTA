@@ -579,7 +579,16 @@ int Modem_Mqtt_Check_Buff(int idx, uint8_t status_buff[5]);
 int Modem_Mqtt_Read_data(int idx, int num_mem, char* response);
 
 
-int Modem_sub_topic_json(int ID, char* topic_name, char* response);
+/**
+ * Suscribe el módem a un tema MQTT y espera una respuesta en formato JSON.
+ * 
+ * @param idx Índice del cliente MQTT.
+ * @param topic_name Nombre del tema al que suscribirse.
+ * @param response Puntero al buffer donde se almacenará la respuesta JSON.
+ * @return MD_CFG_SUCCESS si se suscribe correctamente y se recibe una respuesta JSON,
+ *         MD_CFG_FAIL en caso contrario.
+ */
+int Modem_sub_topic_json(int idx, char* topic_name, char* response);
                                                                                    
 
 

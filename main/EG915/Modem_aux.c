@@ -113,3 +113,19 @@ int remove_word_from_string(char *input_string, const char *target) {
         return -1; // La palabra no se encontró
     }
 }
+
+void extraer_ultimos(const char *cadena_entrada, size_t longitud, char *ultimos_datos) {
+    size_t longitud_entrada = strlen(cadena_entrada);
+    
+    // Si la longitud de la cadena de entrada es menor o igual a la longitud deseada,
+    // simplemente copiamos toda la cadena de entrada
+    if (longitud_entrada <= longitud) {
+        strcpy(ultimos_datos, cadena_entrada);
+    } else {
+        // Calculamos el índice de inicio de los últimos datos
+        size_t inicio = longitud_entrada - longitud;
+        
+        // Copiamos los últimos datos al buffer de salida
+        strcpy(ultimos_datos, cadena_entrada + inicio);
+    }
+}

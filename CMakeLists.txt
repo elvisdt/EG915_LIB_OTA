@@ -4,9 +4,9 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-set(PROJECT_VER "1.2")  
+set(PROJECT_VER "1.3")  
 add_definitions(-DPROJECT_VER="${PROJECT_VER}")
-set(PROJECT_NAME "EG915-MODEM")  
+set(PROJECT_NAME "EG915_LIB")  
 add_definitions(-DPROJECT_NAME="${PROJECT_NAME}")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

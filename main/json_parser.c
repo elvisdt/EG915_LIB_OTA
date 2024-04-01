@@ -30,3 +30,24 @@ int modem_info_to_json(const modem_gsm_t modem, char* buffer){
 
     return 1;
 }
+
+void parse_json_example(const char *json_string) {
+    cJSON *root = cJSON_Parse(json_string);
+    if (root == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            printf("Error parsing JSON: %s\n", error_ptr);
+        }
+        return;
+    }
+
+    // Obtener el valor del campo "value"
+    cJSON *value_item = cJSON_GetObjectItem(root, "value");
+    if (value_item != NULL) {
+        int value = value_item->valueint;
+        printf("Valor: %d\n", value);
+    }
+
+    // Liberar la memoria
+    cJSON_Delete(root);
+}

@@ -396,7 +396,7 @@ int Modem_sync_time(char* response) {
 
 // Función principal para actualizar la hora
 int Modem_update_time(uint8_t max_int){
-	ESP_LOGI(TAG, "--> UPDATE TIME <--");
+	ESP_LOGI(TAG, "=> UPDATE TIME ");
     int ret=0;
     char* servidor="time.google.com"; // Servidor NTP inicial
 	for (size_t i = 0; i < max_int; i++){
@@ -539,7 +539,7 @@ int Modem_get_dev_info(EG915_info_t* dev_modem){
 
 
 int Modem_get_signal(){
-	ESP_LOGI(TAG,"--> MODEM GET SIGNAL <--");
+	ESP_LOGI(TAG,"=> MODEM GET SIGNAL");
 	char *linea;
 	int valor1, valor2;
 	int a = sendAT("AT+CSQ\r\n","+CSQ","ERROR",500,buff_reciv);
@@ -641,7 +641,7 @@ int Modem_Mqtt_CheckOpen(int idx, char* MQTT_IP, char* MQTT_PORT){
 
 
 int Modem_Mqtt_Conn(int idx, const char* clientID){
-	ESP_LOGI(TAG,"--> MQTT CONNECTION <--");
+	// ESP_LOGI(TAG,"--> MQTT CONNECTION <--");
 
 	char res_esperada[20]={0};
 	sprintf(res_esperada,"+QMTCONN: %d,",idx);
@@ -679,7 +679,7 @@ int Modem_Mqtt_Conn(int idx, const char* clientID){
 }
 
 int Modem_Mqtt_CheckConn(int idx) {
-    ESP_LOGI(TAG, "--> MQTT CHECK CONNECTION <--");
+    // ESP_LOGI(TAG, "==> MQTT CHECK CONNECTION");
     char res_esperada[30] = {0};
     sprintf(res_esperada, "+QMTCONN: %d,", idx);
     
@@ -749,7 +749,7 @@ int Modem_Mqtt_Pub(char* data, char* topic, int data_len, int id , int retain){
 
 
 int Modem_Mqtt_Sub(int idx, char* topic_name){
-	ESP_LOGI(TAG, "--> MQTT SUBS TOPIC <--");
+	// ESP_LOGI(TAG, "--> MQTT SUBS TOPIC <--");
 	int ret = 0;
 	char res_esperada[30]={0};
 	sprintf(res_esperada,"+QMTSUB: %d,",idx);
@@ -760,6 +760,8 @@ int Modem_Mqtt_Sub(int idx, char* topic_name){
 
 	int result;
 	remove_spaces(buff_reciv);
+	printf("SUBS: %s \r\n",buff_reciv);
+
 	ret = sscanf(buff_reciv,"+QMTSUB:%*d,%*d,%d,%*d", &result);
 	if (ret==1){
 		if (result==0){
@@ -777,7 +779,7 @@ int Modem_Mqtt_Sub(int idx, char* topic_name){
 
 
 int Modem_Mqtt_Check_Buff(int idx, uint8_t status_buff[5]) {
-    ESP_LOGI(TAG, "--> MQTT READ SUBS TOPIC FROM BUFFER <--");
+    // ESP_LOGI(TAG, "--> MQTT READ SUBS TOPIC FROM BUFFER <--");
     int ret = 0;
     char res_esperada[30] = {0};
     sprintf(res_esperada, "+QMTRECV: %d,", idx);
@@ -787,10 +789,11 @@ int Modem_Mqtt_Check_Buff(int idx, uint8_t status_buff[5]) {
     if (ret != MD_AT_OK) {
         return MD_CFG_FAIL;
     }
-
+	// printf("RESPONSE: %s\r\n",buff_reciv);
     if (strstr(buff_reciv, res_esperada) != NULL) {
         int ss0, ss1, ss2, ss3, ss4;
         remove_spaces(buff_reciv);
+		//printf("RESPONSE: %s\r\n",buff_reciv);
         ret = sscanf(buff_reciv, "+QMTRECV:%*d,%d,%d,%d,%d,%d", &ss0, &ss1, &ss2, &ss3, &ss4);
         if (ret == 5) {
             status_buff[0] = ss0;
@@ -840,25 +843,39 @@ int Modem_Mqtt_Unsub(int idx, char* topic_name){
 	return a; //MD_AT_OK, MD_AT_ERROR MD_AT_TIMEOUT
 }
 
-int Modem_sub_topic_json(int ID, char* topic_name, char* response){
-    sprintf(buff_send,"AT+QMTSUB=%d,1,\"%s\",0\r\n",ID,topic_name);
+
+
+int Modem_sub_topic_json(int idx, char* topic_name, char* response){
     
+	memset(response,'\0',strlen(response));
+
+	sprintf(buff_send,"AT+QMTSUB=%d,1,\"%s\",0\r\n",idx,topic_name);
 	int success =sendAT(buff_send,"+QMTRECV:","ERROR\r\n",20000,buff_reciv);
 
+	//printf("buf data reciv: %s\r\n",buff_reciv);
     if(success != MD_AT_OK){
-        ESP_LOGE("MQTT Subs","No se recibio respuesta del topico:\n%s\n",topic_name);
+        ESP_LOGE("MQTT Subs","Not data: %s\r\n",topic_name);
         return MD_CFG_FAIL;
     }
 	
-	char *start;
-	start = strchr(buff_reciv, '{');
+	// +QMTRECV: <client_idx>,<msgid>,<topic>[,<payload_len>],<payload>
+	// "+QMTRECV: 0,0,\"OTA/868695060088992/CONFIG\",17,\"{\"value\":278}\""
 
-	// Si se encontró la llave
-	if(start != NULL){
-		char *data = strdup(start);
-		strcpy(response,data);
-		free(data);
-		return MD_CFG_SUCCESS; // RESPUESTA OK
+	int payload_len;
+	// Utiliza sscanf para extraer el valor de payload_len
+	if (sscanf(buff_reciv, "\r\n+QMTRECV: %*d,%*d,%*[^,],%d,", &payload_len) == 1) {
+		extraer_ultimos(buff_reciv, (payload_len+4), response);
+		remove_spaces(response);
+
+		// eliminar las comillas del el primero y ultimo valor
+    	size_t longitud = strlen(response);
+        if (longitud>2){
+			strncpy(response, response + 1, longitud - 2);
+        	response[longitud - 2] = '\0';
+		}
+
+        //printf("DATA EXTRACT: %s\n", response);
+		return MD_CFG_SUCCESS;
 	}
     return MD_CFG_FAIL;
 }

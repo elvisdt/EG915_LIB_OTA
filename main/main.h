@@ -35,5 +35,6 @@ int split_and_check_IP(char* cadena, char* ip);
 
 int modem_info_to_json(const modem_gsm_t, char* buffer);
 
+void parse_json_example(const char *json_string);
 
 #endif /*_MAIN_H_*/

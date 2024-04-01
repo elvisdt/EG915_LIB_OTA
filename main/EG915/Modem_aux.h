@@ -50,4 +50,18 @@ int find_phone_and_extract(const char* input_string, char* phone);
  */
 int remove_word_from_string(char *input_string, const char *target);
 
+
+/**
+ * @brief Extrae los últimos datos de una cadena de entrada y los almacena en otra cadena.
+ *
+ * Esta función toma una cadena de entrada y extrae los últimos datos de acuerdo con la longitud especificada.
+ * Si la longitud de la cadena de entrada es menor o igual a la longitud deseada, copia toda la cadena de entrada.
+ * De lo contrario, copia los últimos datos desde el índice de inicio correcto.
+ *
+ * @param cadena_entrada La cadena de entrada de la cual se extraerán los últimos datos.
+ * @param longitud La longitud de los últimos datos que se desean extraer.
+ * @param ultimos_datos La cadena de salida donde se almacenarán los últimos datos extraídos.
+ */
+void extraer_ultimos(const char *cadena_entrada, size_t longitud, char *ultimos_datos);
+
 #endif /* _MODEM_AUX_H_ */
