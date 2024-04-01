@@ -58,11 +58,15 @@
 #define MD_MQTT_SUB_UNKNOWN      (MD_BASE_MQTT  + 0x52)
 
 
-#define MD_MQTT_RECV_OK           (MD_CFG_SUCCESS)
 #define MD_MQTT_RECV_FAIL         (MD_MQTT_ERR_GEN)
 #define MD_MQTT_RECV_BUFF_DATA    (MD_BASE_MQTT + 0x61)
 #define MD_MQTT_RECV_BUFF_CLEAN   (MD_BASE_MQTT + 0x62)
 #define MD_MQTT_RECV_UNKOWN       (MD_BASE_MQTT + 0x63)
+
+#define MD_MQTT_READ_OK           (MD_CFG_SUCCESS)
+#define MD_MQTT_READ_FAIL         (MD_MQTT_ERR_GEN)
+#define MD_MQTT_READ_NO_FOUND     (MD_BASE_MQTT + 0x71)
+
 
 
 

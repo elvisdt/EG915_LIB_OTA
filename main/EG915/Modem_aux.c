@@ -94,24 +94,22 @@ int find_phone_and_extract(const char* input_string, char* phone) {
             int value_length = second_comma - first_comma - 1;
             strncpy(phone, first_comma + 1, value_length);
             phone[value_length] = '\0';
-            return 1;
+            return 0; // OK
         }
     }
-    return 0;
+    return -1; // FAIL
 }
+
 
 
 
 int remove_word_from_string(char *input_string, const char *target) {
     char *found = strstr(input_string, target);
     if (found) {
-        // Calcula la longitud del string antes de la palabra a eliminar
-       /// size_t length_before_target = found - input_string;
-
         // Copia el string sin la palabra a eliminar
         memmove(found, found + strlen(target), strlen(found + strlen(target)) + 1);
-        return 1; // Éxito
+        return 0; // Éxito
     } else {
-        return 0; // La palabra no se encontró
+        return -1; // La palabra no se encontró
     }
 }

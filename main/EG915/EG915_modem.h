@@ -567,6 +567,18 @@ int Modem_Mqtt_Unsub(int idx, char* topic_name);
  */
 int Modem_Mqtt_Check_Buff(int idx, uint8_t status_buff[5]);
 
+
+/**
+ * Lee los datos recibidos en un tópico MQTT desde el búfer del módem.
+ * 
+ * @param idx El índice del tópico MQTT del que se leerán los datos.
+ * @param num_mem El número de mensajes en memoria que se leerán.
+ * @param response El buffer donde se almacenarán los datos leídos.
+ * @return MD_MQTT_READ_OK si se leyeron los datos correctamente, MD_MQTT_READ_FAIL si ocurrió un error al leer, MD_MQTT_READ_NO_FOUND si no se encontraron datos.
+ */
+int Modem_Mqtt_Read_data(int idx, int num_mem, char* response);
+
+
 int Modem_sub_topic_json(int ID, char* topic_name, char* response);
                                                                                    
 

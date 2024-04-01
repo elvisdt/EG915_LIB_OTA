@@ -810,6 +810,29 @@ int Modem_Mqtt_Check_Buff(int idx, uint8_t status_buff[5]) {
     return MD_MQTT_RECV_FAIL;
 }
 
+int Modem_Mqtt_Read_data(int idx, int num_mem, char* response) {
+    ESP_LOGI(TAG, "--> MQTT READ SUBS TOPIC FROM BUFFER <--");
+    int ret = 0;
+	memset(response,'\0',strlen(response));
+    char res_esperada[] = "+QMTRECV: ";
+    sprintf(buff_send, "AT+QMTRECV=%d,%d\r\n", idx, num_mem);
+    ret = sendAT(buff_send, "OK\r\n", "ERROR\r\n", 20000, buff_reciv);
+    WAIT_MS(200);
+
+    if (ret != MD_AT_OK) {
+        return MD_MQTT_READ_FAIL;
+    }
+    if (strstr(buff_reciv, res_esperada) != NULL) {
+		remove_word_from_string(buff_reciv, res_esperada);
+		remove_word_from_string(buff_reciv, "OK\r\n");
+		remove_newlines(buff_reciv);
+        strcpy(response, buff_reciv);
+		return MD_MQTT_READ_OK;
+    }
+    return MD_MQTT_READ_NO_FOUND;
+}
+
+
 int Modem_Mqtt_Unsub(int idx, char* topic_name){
 	sprintf(buff_send,"AT+QMTUNS=%d,1,\"%s\"\r\n",idx, topic_name);
 	int a = sendAT(buff_send,"+QMTUNS:","ERROR",12000,buff_reciv);
@@ -865,7 +888,7 @@ int Modem_SMS_Read(char* mensaje, char *numero){
 
 	 if (sms_data.lines >= 2){
 		//line 0
-		if (find_phone_and_extract(sms_data.data[0], numero) == 1) {
+		if (find_phone_and_extract(sms_data.data[0], numero) == 0) {
             #if DEBUG_MODEM
             	ESP_LOGW(TAG, "phone:%s", numero);
             #endif
@@ -986,7 +1009,7 @@ int TCP_send(char *msg, uint8_t len){
 }
 
 int TCP_close(){
-    ESP_LOGI(TAG,"==>> CLOSE TCP");
+    ESP_LOGI(TAG,"==>> CLOSE TCP <<==");
 	int ret = sendAT("AT+QICLOSE=0\r\n","OK\r\n","ERROR\r\n",20000,buff_reciv);
 	WAIT_MS(100);
 
@@ -1000,7 +1023,7 @@ int TCP_close(){
 uint8_t OTA(uint8_t *buff, uint8_t *inicio, uint8_t *fin, uint32_t len){
     const char *TAG = "OTA";
     if (*inicio) { //If it's the first packet of OTA since bootup, begin OTA
-        ESP_LOGI(TAG,"BeginOTA");
+        ESP_LOGI(TAG,"Begin OTA");
         const esp_task_wdt_config_t config_wd = {
                 .timeout_ms = 20,
                 .idle_core_mask = 0,

@@ -96,7 +96,7 @@ EG915_uart_t modem_uart;
 
 
 /*---> OTA <--*/
-char watchdog_en=1;
+uint8_t watchdog_en=1;
 uint32_t current_time=0;
 
 
@@ -109,7 +109,9 @@ bool ble_stopped = false; // Indicador de si el BLE está detenido
 
 
 /*--> global main variables <--*/
-uint32_t Info_time=5;
+uint8_t delay_info = 1;
+uint32_t Info_time=0;
+uint32_t MQTT_read_time=0;
 uint32_t OTA_md_time=1;
 
 /***********************************************
@@ -192,7 +194,7 @@ void OTA_Modem_Check(void){
     static const char *TAG_OTA = "OTA_MD";
     esp_log_level_set(TAG_OTA, ESP_LOG_INFO);
 
-    ESP_LOGI(TAG_OTA,">>> MODEM OTA CHECK <<<");
+    ESP_LOGI(TAG_OTA,"==MODEM OTA CHECK ==");
     char buffer[500] ="";
     do{
         if(TCP_open(ip_OTA, port_OTA)!=MD_TCP_OPEN_OK){
@@ -259,6 +261,9 @@ int CheckRecMqtt(void){
     static int ret_conn=0;
     static int ret_open=0;
 
+    static char topic_sub[60]={0};
+    sprintf(topic_sub,"%s/%s/CONFIG",MASTER_TOPIC_MQTT, data_modem.info.imei);
+
     if (num_max_check >(MAX_ATTEMPS+2)){
         ESP_LOGE("MAIN-MQTT", "RESTART ESP32");
         esp_restart();
@@ -275,13 +280,15 @@ int CheckRecMqtt(void){
         }else if (ret_open==MD_MQTT_IS_OPEN){
             //Conectamos son nuesto indice e imei
             Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
+            Modem_Mqtt_Sub(mqtt_idx,topic_sub);
         }else if (ret_open==MD_MQTT_NOT_OPEN){
             num_max_check ++;
             // Configurar y Abrir  MQTT
             ret_open=Modem_Mqtt_Open(mqtt_idx,ip_MQTT,port_MQTT);
             if (ret_open == MD_MQTT_OPEN_OK){
-                // Abrir comunicacion 
+                // Abrir comunicacion  y suscripcion
                 Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
+                Modem_Mqtt_Sub(mqtt_idx,topic_sub);
             }else{
                 WAIT_S(2);
                 // desconectar y cerrar en caso exista alguna comunicacion
@@ -293,6 +300,7 @@ int CheckRecMqtt(void){
     }else if (ret_conn==MD_MQTT_CONN_INIT || ret_conn == MD_MQTT_CONN_DISCONNECT){
         WAIT_S(1);
         Modem_Mqtt_Conn(mqtt_idx, data_modem.info.imei);
+        Modem_Mqtt_Sub(mqtt_idx,topic_sub);
         CheckRecMqtt();  // CHECK AGAIN
     }else if (ret_conn==MD_MQTT_CONN_CONNECT){
         WAIT_S(1);
@@ -372,8 +380,37 @@ void Info_Send(void){
 	if(ret_check ==MD_MQTT_CONN_OK){
 		ret_check = Modem_Mqtt_Pub(buff_aux,topic,strlen(buff_aux),mqtt_idx, 0);
         ESP_LOGI("MQTT-INFO","ret-pubb: 0x%X",ret_check);
+        Modem_Mqtt_Pub(buff_aux,"HOLA/DATA",strlen(buff_aux),mqtt_idx,0);
+        WAIT_S(1);
 	}
-	
+	// Modem_Mqtt_Disconnect(mqtt_idx);
+    return;
+}
+
+/**
+ * Lee los datos de un mensaje MQTT y los procesa.
+ */
+void MQTT_Read(void){
+    ESP_LOGI("MQTT-READ","<-- Send device info -->");
+    uint8_t mem_mqtt[5]={0};
+
+	int ret_check =  CheckRecMqtt();
+    ESP_LOGI("MQTT-READ","ret-conn: 0x%X",ret_check);
+	if(ret_check ==MD_MQTT_CONN_OK){
+        ret_check = Modem_Mqtt_Check_Buff(mqtt_idx, mem_mqtt);
+        if (ret_check == MD_MQTT_RECV_BUFF_DATA){
+            size_t num_elementos = sizeof(mem_mqtt) / sizeof(mem_mqtt[0]);
+            for (size_t i = 0; i < num_elementos; i++){
+                if (mem_mqtt[i]==1){
+                    ret_check=Modem_Mqtt_Read_data(mqtt_idx, i,buff_aux );
+                    if (ret_check == MD_SMS_READ_FOUND){
+                        ESP_LOGW("MQTT-READ","DATA: %s",buff_aux);
+                    }
+                }
+            WAIT_S(1);
+            }
+        }
+	}
     return;
 }
 
@@ -398,19 +435,36 @@ void Info_Send(void){
 static void Main_Task(void* pvParameters){
     WAIT_S(3);
 	for(;;){
+        
+        if(Modem_check_AT()!=MD_AT_OK){
+			WAIT_S(2);
+            if(Modem_check_AT()!=MD_AT_OK){
+				Active_modem();
+			}
+		}
+
 		current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
 		if (current_time%30==0){
 			printf("Tiempo: %lu\r\n",current_time);
 		}
 
+        // SEND INFO DATA
 		if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= Info_time){
 			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
-			Info_time+= 3*60;// cada 5 min
+			Info_time+= delay_info*60;// cada 1 min
 			if(ret_update_time!=MD_CFG_SUCCESS){
 			    ret_update_time=Modem_update_time(1);
-			    vTaskDelay(100);
 			}
             Info_Send();
+            WAIT_S(1);
+		}
+
+        // SEND CHECK READ DATA
+        if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= MQTT_read_time){
+			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+			Info_time+= 10;// cada 20 seg
+            MQTT_Read();
+            WAIT_S(1);
 		}
         if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= OTA_md_time){
 			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
@@ -418,20 +472,33 @@ static void Main_Task(void* pvParameters){
 			OTA_Modem_Check();
 			printf("Siguiente ciclo en 60 segundos\r\n");
 			printf("OTA CHECK tomo %lu segundos\r\n",(pdTICKS_TO_MS(xTaskGetTickCount())/1000-current_time));
-
 			vTaskDelay(100);
 		}
-		if(Modem_check_AT()!=MD_AT_OK){
-			WAIT_S(2);
-            if(Modem_check_AT()!=MD_AT_OK){
-				Active_modem();
-			}
-		}
+
 		WAIT_S(1);
 	}
 	vTaskDelete(NULL);
 }
 
+
+
+static void WTD_Task(void* pvParameters){
+	uint32_t watchdog_time;
+	for(;;){
+		watchdog_time=((pdTICKS_TO_MS(xTaskGetTickCount())/1000)-current_time);
+		if (watchdog_time >=180 && watchdog_en){
+			ESP_LOGE("WTD","Modem no espondio por mas de 3 minutos, RESTART..");
+			vTaskDelete(MAIN_task_handle);
+			Modem_turn_OFF();
+			esp_restart();
+		}
+		if (watchdog_en){
+            ESP_LOGI("WTD","Tiempo desde ultimo uso del modem: %lu segundos",watchdog_time);
+		}
+		vTaskDelay(pdMS_TO_TICKS(5000));
+	}
+	vTaskDelete(NULL);
+}
 
 void app_main(void){
     ESP_LOGI(TAG, "--->> INIT PROJECT <<---");
@@ -523,8 +590,7 @@ void app_main(void){
 
 
     // OTA_Modem_Check();
-
-    xTaskCreate(Main_Task,"M95_Task",6144,NULL,10,&MAIN_task_handle);
-    
+    xTaskCreate(Main_Task,"Main_Task",1024*6,NULL,10,&MAIN_task_handle);
+    xTaskCreate(WTD_Task,"Wtd_Task",104*2,NULL,11,NULL);
 }
 
