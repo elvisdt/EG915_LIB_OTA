@@ -23,6 +23,15 @@ typedef struct modem_gsm{
 }modem_gsm_t;
 
 
+typedef struct {
+    char mac[20];
+    char name[10];
+    float tem_max;
+    float tem_min;
+}cfg_ble_t;
+
+
+
 int validarIP(const char* ip);
 
 char* m_get_esp_rest_reason();
@@ -33,8 +42,8 @@ int split_and_check_IP(char* cadena, char* ip);
  * JASON PARSER
 *************************************************/
 
-int modem_info_to_json(const modem_gsm_t, char* buffer);
+int js_modem_to_str(const modem_gsm_t, char* buffer);
 
-void parse_json_example(const char *json_string);
+int js_str_to_ble(const char *json_string, cfg_ble_t *ble_config);
 
 #endif /*_MAIN_H_*/

@@ -379,7 +379,7 @@ void Info_Send(void){
 	time(&data_modem.time);
 	data_modem.signal = Modem_get_signal();
 	
-	modem_info_to_json(data_modem, buff_aux);
+	js_modem_to_str(data_modem, buff_aux);
 
 	int ret_check =  CheckRecMqtt();
     ESP_LOGI("MQTT-INFO","ret-conn: 0x%X",ret_check);
@@ -402,11 +402,11 @@ void MQTT_Read(void){
     static char topic_sub[60]={0};
     sprintf(topic_sub,"%s/%s/CONFIG",MASTER_TOPIC_MQTT, data_modem.info.imei);
 
-    state_mqtt_sub = Modem_sub_topic_json(mqtt_idx, topic_sub, buff_aux);
+    state_mqtt_sub = Modem_Mqtt_Sub_Topic(mqtt_idx, topic_sub, buff_aux);
     printf("sub mqtt= 0x%X\r\n",state_mqtt_sub);
     if (state_mqtt_sub == MD_CFG_SUCCESS) {
         printf("DATA: %s\r\n",buff_aux);
-        parse_json_example(buff_aux);
+        //js_modem_to_str(buff_aux);
     }
     
     Modem_Mqtt_Unsub(mqtt_idx, topic_sub);

@@ -845,7 +845,7 @@ int Modem_Mqtt_Unsub(int idx, char* topic_name){
 
 
 
-int Modem_sub_topic_json(int idx, char* topic_name, char* response){
+int Modem_Mqtt_Sub_Topic(int idx, char* topic_name, char* response){
     
 	memset(response,'\0',strlen(response));
 
@@ -860,7 +860,6 @@ int Modem_sub_topic_json(int idx, char* topic_name, char* response){
 	
 	// +QMTRECV: <client_idx>,<msgid>,<topic>[,<payload_len>],<payload>
 	// "+QMTRECV: 0,0,\"OTA/868695060088992/CONFIG\",17,\"{\"value\":278}\""
-
 	int payload_len;
 	// Utiliza sscanf para extraer el valor de payload_len
 	if (sscanf(buff_reciv, "\r\n+QMTRECV: %*d,%*d,%*[^,],%d,", &payload_len) == 1) {

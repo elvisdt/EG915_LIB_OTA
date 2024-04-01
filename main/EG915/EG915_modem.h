@@ -588,7 +588,7 @@ int Modem_Mqtt_Read_data(int idx, int num_mem, char* response);
  * @return MD_CFG_SUCCESS si se suscribe correctamente y se recibe una respuesta JSON,
  *         MD_CFG_FAIL en caso contrario.
  */
-int Modem_sub_topic_json(int idx, char* topic_name, char* response);
+int Modem_Mqtt_Sub_Topic(int idx, char* topic_name, char* response);
                                                                                    
 
 

@@ -10,11 +10,11 @@
 //-------------------------------------//
 
 
-int modem_info_to_json(const modem_gsm_t modem, char* buffer){
+int js_modem_to_str(const modem_gsm_t modem, char* buffer){
     cJSON *root = cJSON_CreateObject();
     if (root == NULL) {
         printf("Error al crear el objeto JSON\n");
-        return 0;
+        return -1;
     }
     cJSON_AddStringToObject(root, "iccid",   modem.info.iccid);
     cJSON_AddStringToObject(root, "code",    modem.code);
@@ -28,26 +28,38 @@ int modem_info_to_json(const modem_gsm_t modem, char* buffer){
     free(json);
     json=NULL;
 
-    return 1;
+    return 0;
 }
 
-void parse_json_example(const char *json_string) {
+
+
+int js_str_to_ble(const char *json_string, cfg_ble_t *ble_config) {
     cJSON *root = cJSON_Parse(json_string);
     if (root == NULL) {
         const char *error_ptr = cJSON_GetErrorPtr();
         if (error_ptr != NULL) {
             printf("Error parsing JSON: %s\n", error_ptr);
         }
-        return;
+        return -1;
     }
 
-    // Obtener el valor del campo "value"
-    cJSON *value_item = cJSON_GetObjectItem(root, "value");
-    if (value_item != NULL) {
-        int value = value_item->valueint;
-        printf("Valor: %d\n", value);
+    cJSON *ble_item = cJSON_GetObjectItem(root, "ble");
+    if (ble_item != NULL) {
+        cJSON *mac_item = cJSON_GetObjectItem(ble_item, "mac");
+        cJSON *name_item = cJSON_GetObjectItem(ble_item, "name");
+        cJSON *tmax_item = cJSON_GetObjectItem(ble_item, "Tmax");
+        cJSON *tmin_item = cJSON_GetObjectItem(ble_item, "Tmin");
+        
+        if (mac_item && name_item && tmax_item && tmin_item) {
+            strncpy(ble_config->mac, mac_item->valuestring, sizeof(ble_config->mac));
+            strncpy(ble_config->name, name_item->valuestring, sizeof(ble_config->name));
+            ble_config->tem_max = (float)tmax_item->valuedouble;
+            ble_config->tem_min = (float)tmin_item->valuedouble;
+            cJSON_Delete(root);
+            return 0; // Se encontraron todos los campos
+        }
     }
 
-    // Liberar la memoria
     cJSON_Delete(root);
+    return -1; // No se encontraron todos los campos
 }
