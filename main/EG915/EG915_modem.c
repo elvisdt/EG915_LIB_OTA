@@ -159,51 +159,41 @@ int sendAT(char *command, char *ok, char *error, uint32_t timeout, char *respons
 	return send_resultado;
 }
 
-int readAT(char *ok, char *error, uint32_t timeout, char *response) {
-    // Inicializa variables
-    memset(response, '\0', strlen(response));
-    
-	int correcto = MD_AT_TIMEOUT;
-    bool _timeout = true;
 
-    // Mide el tiempo
-    actual_time_M95 = esp_timer_get_time();
-    idle_time_m95 = (uint64_t)(timeout * 1000);
+int readAT(char *ok, char *error, uint32_t timeout, char *response){
+	
+	memset(response, '\0',strlen(response));
+	int correcto=MD_AT_TIMEOUT;
 
-    rx_modem_ready = 0;
+	uint64_t n = esp_timer_get_time();
+	rx_modem_ready = 0;
 
-    // Espera la respuesta
-    while ((esp_timer_get_time() - actual_time_M95) < idle_time_m95) {
-        if (rx_modem_ready == 0) {
-            vTaskDelay(1 / portTICK_PERIOD_MS);
-            continue;
-        }
-        if (strstr((char *)p_RxModem, ok) != NULL) {
-            correcto = MD_AT_OK;
-            _timeout = false;
-            break;
-        } else if (strstr((char *)p_RxModem, error) != NULL) {
-            correcto = MD_AT_ERROR;
-            _timeout = false;
-            break;
-        }
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-        rx_modem_ready = 0;
-    }
+	while(esp_timer_get_time() < (n + timeout * 1000) ){
+		vTaskDelay(1);
+		if(rx_modem_ready == 1){
+			break;
+		}
+	}
+	if(rxBytesModem > 0){
+		memcpy(response,p_RxModem,rxBytesModem);
+		//check if the response is correct
+		if(strstr(response,ok)!=NULL){
+			correcto=MD_AT_OK;
+		}
+		//check if there is an error
+		else if(strstr(response,error)!=NULL){
+			correcto=MD_AT_ERROR;
+		}
+	}
 
-    // Maneja el tiempo de espera
-    if (_timeout) {
-        ESP_LOGE(TAG, "El módem no respondió");
-        return MD_AT_TIMEOUT;
-    }
-
-    strcpy(response, (char *)p_RxModem);
-    #if DEBUG_MODEM
-        ESP_LOGI(TAG, "-> %s", response);
-    #endif
-    return correcto;
+	#if DEBUG_MODEM
+		if (correcto!=MD_AT_TIMEOUT){
+			printf(response);
+			printf("\r\n");
+		}
+	#endif
+	return correcto;
 }
-
 
 
 int Modem_turn_ON(){
@@ -232,7 +222,7 @@ int Modem_turn_ON(){
 
 int Modem_check_AT(){
 	int ret = 0;
-	ESP_LOGI(TAG, "=> CHECK COMMAND AT");
+	ESP_LOGI(TAG, "CHECK COMMAND AT");
 	uart_flush(modem_uart.uart_num);
 
 	WAIT_MS(500);
@@ -406,12 +396,13 @@ int Modem_sync_time(char* response) {
 
 // Función principal para actualizar la hora
 int Modem_update_time(uint8_t max_int){
+	ESP_LOGI(TAG, "--> UPDATE TIME <--");
     int ret=0;
     char* servidor="time.google.com"; // Servidor NTP inicial
 	for (size_t i = 0; i < max_int; i++){
 		sprintf(buff_send, "AT+QNTP=1,\"%s\",123,1\r\n", servidor);
 		WAIT_MS(100);
-		if (sendAT(buff_send, "+QNTP:", "ERROR", 70000, buff_reciv)== 1) {
+		if (sendAT(buff_send, "+QNTP:", "ERROR", 70000, buff_reciv)== MD_AT_OK) {
 			ret = Modem_sync_time(buff_reciv);
 			if (ret ==  MD_CFG_SUCCESS) return ret;//OK UPDATE
 			
@@ -828,14 +819,12 @@ int Modem_Mqtt_Unsub(int idx, char* topic_name){
 
 int Modem_sub_topic_json(int ID, char* topic_name, char* response){
     sprintf(buff_send,"AT+QMTSUB=%d,1,\"%s\",0\r\n",ID,topic_name);
-    int success = 0;    
-    if(sendAT(buff_send,"+QMTRECV:","ERROR\r\n",20000,buff_reciv) == 1){
-        success = 1;
-    }
+    
+	int success =sendAT(buff_send,"+QMTRECV:","ERROR\r\n",20000,buff_reciv);
 
-    if(success == 0){
+    if(success != MD_AT_OK){
         ESP_LOGE("MQTT Subs","No se recibio respuesta del topico:\n%s\n",topic_name);
-        return 0;
+        return MD_CFG_FAIL;
     }
 	
 	char *start;
@@ -846,9 +835,9 @@ int Modem_sub_topic_json(int ID, char* topic_name, char* response){
 		char *data = strdup(start);
 		strcpy(response,data);
 		free(data);
-		return 1; // RESPUESTA OK
+		return MD_CFG_SUCCESS; // RESPUESTA OK
 	}
-    return -1;
+    return MD_CFG_FAIL;
 }
 
 
@@ -938,24 +927,40 @@ int Modem_SMS_delete(){
 
 int TCP_open(char *ip_tcp, char *port_tcp){
 
+	ESP_LOGI(TAG, "==> MODEM OPEN TCP <==");
 	// AT+QICSGP=3,1,"movistar.pe","","",1
 	sprintf(buff_send,"AT+QICSGP=3,1,\"%s,\"\",\"\",1\r\n",APN);
     sendAT(buff_send,"OK","ERROR",10000,buff_reciv);
 	WAIT_MS(100);
 
     // Activate a PDP Context
-    sendAT("AT+QIACT=1\r\n","OK","ERROR",150000,buff_reciv);
+    sendAT("AT+QIACT=1\r\n","OK","ERROR",100000,buff_reciv);
 	WAIT_MS(100);
 
 	sendAT("AT+QIACT?\r\n","OK","ERROR",10000,buff_reciv);
 
-    //char qiopen[40];
+    char res_esperada[]= "+QIOPEN:";
     sprintf(buff_send,"AT+QIOPEN=1,0,\"TCP\",\"%s\",%s,0,0\r\n",ip_tcp, port_tcp);
-    int ret = sendAT(buff_send,"+QIOPEN: 0,0","ERROR",150000,buff_reciv);
+    int ret = sendAT(buff_send,res_esperada,"ERROR",150000,buff_reciv);
+
     if(ret != MD_AT_OK){
-        return MD_TCP_OPEN_FAIL;
-    }
-	return MD_TCP_OPEN_OK;
+		return MD_TCP_OPEN_FAIL;
+	}
+
+	char *result = strstr(buff_reciv, res_esperada);
+	if (result != NULL){
+		remove_spaces(result);
+		printf("result: %s\n\r",result);
+		int val=-1;
+		if (sscanf(result,"+QIOPEN:%*d,%d",&val)==1){
+			if(val==0){
+				return MD_TCP_OPEN_OK;
+			}else{
+				return MD_TCP_OPEN_FAIL;
+			}	
+		}
+	}
+	return MD_TCP_OPEN_FAIL;
 }
 
 
@@ -973,7 +978,6 @@ int TCP_send(char *msg, uint8_t len){
 	uart_write_bytes(modem_uart.uart_num,(void *)msg,len);
     ret = sendAT("\x1A","SEND OK\r\n","ERROR\r\n",25500,buff_reciv);
 
-	// temporal = sendAT(msg,"SEND OK\r\n","ERROR\r\n",25500,buff_reciv);
     if(ret != MD_AT_OK){
         return MD_TCP_SEND_FAIL;
     }
@@ -983,14 +987,13 @@ int TCP_send(char *msg, uint8_t len){
 }
 
 int TCP_close(){
-    int ret =0;
-	ret = sendAT("AT+QICLOSE=0\r\n","OK\r\n","ERROR\r\n",25500,buff_reciv);
+    
+	int ret = sendAT("AT+QICLOSE=0\r\n","OK\r\n","ERROR\r\n",25500,buff_reciv);
 	WAIT_MS(100);
 
 	if(ret != MD_AT_OK){
 		return MD_TCP_CLOSE_FAIL;
 	}
-
 	return MD_TCP_CLOSE_OK;
 }
 

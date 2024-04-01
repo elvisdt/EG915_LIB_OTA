@@ -19,7 +19,6 @@ void free_data(data_sms_strt_t* ds) {
 
 // Función para agregar una línea a la estructura
 void add_line(data_sms_strt_t* ds, const char* line) {
-
 	if (strspn(line, " \r\n") != strlen(line)) {
         ds->lines++;
         ds->data = realloc(ds->data, ds->lines * sizeof(char*));

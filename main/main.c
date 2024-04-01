@@ -192,7 +192,7 @@ void OTA_Modem_Check(void){
     static const char *TAG_OTA = "OTA_MD";
     esp_log_level_set(TAG_OTA, ESP_LOG_INFO);
 
-    ESP_LOGI(TAG_OTA,"<===> MODEM OTA CHECK <===>");
+    ESP_LOGI(TAG_OTA,">>> MODEM OTA CHECK <<<");
     char buffer[500] ="";
     do{
         if(TCP_open(ip_OTA, port_OTA)!=MD_TCP_OPEN_OK){
@@ -203,11 +203,7 @@ void OTA_Modem_Check(void){
         ESP_LOGI(TAG_OTA,"Requesting update...");
         if(TCP_send(output, strlen(output))==MD_TCP_SEND_OK){                           // 1. Se envia la info del dispositivo
             ESP_LOGI(TAG_OTA,"Waiting for response...");
-            int ret_ota = readAT("}\r\n", "-8/()/(\r\n",10000,buffer);   // 2. Se recibe la 1ra respuesta con ota True si tiene un ota pendiente... (el servidor lo envia justo despues de recibir la info)(}\r\n para saber cuando llego la respuesta)
-            if(ret_ota ==0){
-                ESP_LOGW(TAG_OTA,"There was no answer");
-                break;
-            }
+            readAT("}\r\n", "-8/()/(\r\n",10000,buffer);   // 2. Se recibe la 1ra respuesta con ota True si tiene un ota pendiente... (el servidor lo envia justo despues de recibir la info)(}\r\n para saber cuando llego la respuesta)
             debug_ota("main> repta %s\r\n", buffer);
             if(strstr(buffer,"\"ota\": \"true\"") != 0x00){
                 ESP_LOGI(TAG_OTA,"Start OTA download");
@@ -303,8 +299,6 @@ int CheckRecMqtt(void){
         num_max_check = 0;
         ESP_LOGI("MAIN-MQTT","CONNECT SUCCESFULL");
     }
-
-    printf("ret conn: %d\r\n",ret_conn);
 	return ret_conn;
 }
 
@@ -375,7 +369,7 @@ void Info_Send(void){
     ESP_LOGI("MQTT-INFO","ret-conn: %d",ret_check);
 	if(ret_check ==MD_MQTT_CONN_OK){
 		ret_check = Modem_Mqtt_Pub(buff_aux,topic,strlen(buff_aux),mqtt_idx, 0);
-        ESP_LOGI("MQTT-INFO","ret-pubb:%d",ret_check);
+        ESP_LOGI("MQTT-INFO","ret-pubb:%X",ret_check);
 	}
 	
     return;
@@ -410,7 +404,7 @@ static void Main_Task(void* pvParameters){
 		if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= Info_time){
 			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
 			Info_time+= 3*60;// cada 5 min
-			if(ret_update_time!=1){
+			if(ret_update_time!=MD_CFG_SUCCESS){
 			    ret_update_time=Modem_update_time(1);
 			    vTaskDelay(100);
 			}
@@ -419,7 +413,7 @@ static void Main_Task(void* pvParameters){
         if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= OTA_md_time){
 			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
 			OTA_md_time += 60;
-			// OTA_Modem_Check();
+			OTA_Modem_Check();
 			printf("Siguiente ciclo en 60 segundos\r\n");
 			printf("OTA CHECK tomo %lu segundos\r\n",(pdTICKS_TO_MS(xTaskGetTickCount())/1000-current_time));
 
@@ -526,7 +520,8 @@ void app_main(void){
 	current_time = pdTICKS_TO_MS(xTaskGetTickCount())/1000;
 
 
-    
+    // OTA_Modem_Check();
+
     xTaskCreate(Main_Task,"M95_Task",6144,NULL,10,&MAIN_task_handle);
     
 }
