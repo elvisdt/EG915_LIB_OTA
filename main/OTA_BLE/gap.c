@@ -54,6 +54,9 @@ void sync_cb(void) {
 }
 
 int gap_event_handler(struct ble_gap_event *event, void *arg) {
+
+    ESP_LOGW("GAP","EVENT TYPE 0x%X",event->type);
+    
     switch (event->type) {
         case BLE_GAP_EVENT_CONNECT:
             // A new connection was established or a connection attempt failed
@@ -87,6 +90,7 @@ int gap_event_handler(struct ble_gap_event *event, void *arg) {
             ESP_LOGI(LOG_TAG_GAP, "GAP: MTU update: conn_handle=%d, mtu=%d",
                       event->mtu.conn_handle, event->mtu.value);
             break;
+        
     }
 
     return 0;

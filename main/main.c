@@ -189,6 +189,26 @@ int Active_modem(){
 	return MD_CFG_FAIL;
 }
 
+
+void Init_NVS_Keys(){
+	/*------------------------------------------------*/
+	ESP_LOGI(TAG,"Init NVS keys of data");
+
+	esp_err_t err = nvs_flash_init();
+	if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+		ESP_ERROR_CHECK(nvs_flash_erase());
+		err = nvs_flash_init();
+	}
+    ESP_ERROR_CHECK(err);
+	
+	ESP_LOGI(TAG,"NVS get WMBUS keys");
+	// nvs_open(NAMESPACE_NVS,NVS_READWRITE,&storage_nvs_handle);
+
+	ESP_LOGI(TAG,"NVS keys recovered succsesfull\r\n");
+	return;
+}
+
+
 /**
  * @brief Checks for OTA (Over-The-Air) updates.
  *
@@ -322,43 +342,25 @@ int CheckRecMqtt(void){
  * BLE CONTROLLERS (FUNCS AND TASK)
 *************************************************/
 
-void stop_ble() {
-  ESP_LOGI(TAG, " BLE STOPED");
-    if (!ota_updating) {
-        nimble_port_stop();
-        ble_stopped = true;
-    }
-}
-
 // Función para reiniciar el BLE
-void restart_ble() {
-    ESP_LOGI(TAG, " BLE RESTART");
-    
-    if (ble_stopped) {
-        nimble_port_init();
-        ble_hs_cfg.sync_cb = sync_cb;
-        ble_hs_cfg.reset_cb = reset_cb;
-        gatt_svr_init();
-        ble_svc_gap_device_name_set(device_name);
-        nimble_port_freertos_init(host_task);
-        ble_stopped = false;
-    }
+void init_ota_ble() {
+    ESP_LOGW("BLE",">> INIT BLE OTA ..");
+    int ret=0;
+
+    ret = nimble_port_init();
+    ESP_LOGI("BLE","ret init nimble: 0x%X\n",ret);
+
+    ble_hs_cfg.sync_cb = sync_cb;
+    ble_hs_cfg.reset_cb = reset_cb;
+
+    // ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+    gatt_svr_init();
+    ble_svc_gap_device_name_set(device_name);
+    nimble_port_freertos_init(host_task);
 }
 
-// Tarea para controlar el ciclo de detención y reinicio del BLE
-static void ble_control_task(void *pvParameter) {
-    ble_stopped = true;
-    restart_ble();
-    while (1) {
-        // Reiniciar ble por 5 min
-        // restart_ble();
 
-        // Detener ble por 1 minuto
-        // stop_ble(); 
-        printf("HOLA MUNDO \n");
-        vTaskDelay(60*1000 / portTICK_PERIOD_MS);
-    }
-}
+
 
 bool run_diagnostics() {
     // Verificar si se realizó una actualización OTA correctamente
@@ -465,6 +467,29 @@ void MQTT_Read(void){
     printf("ret_sub: %d\r\n",ret_sub);
 */
 
+/*----------------------------------------------------
+ * Watchdog TASK
+*----------------------------------------------------*/
+static void M95_Watchdog(void* pvParameters){
+	uint32_t watchdog_time;
+	for(;;){
+		watchdog_time=((pdTICKS_TO_MS(xTaskGetTickCount())/1000)-current_time);
+		if (watchdog_time >=180 && watchdog_en){
+			ESP_LOGE("WTD"," moden no respondio por 3 minutos, reiniciando...\r\n");
+			vTaskDelete(MAIN_task_handle);
+			// M95_reset();
+            vTaskDelay(pdMS_TO_TICKS(2000));
+			esp_restart();
+		}
+
+		if (watchdog_en){
+			printf("WTD. time pass: %lu sec\r\n",watchdog_time);
+		}
+		vTaskDelay(pdMS_TO_TICKS(5000));
+	}
+	vTaskDelete(NULL);
+}
+
 static void Main_Task(void* pvParameters){
     WAIT_S(3);
 	for(;;){
@@ -489,7 +514,7 @@ static void Main_Task(void* pvParameters){
         if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= MQTT_read_time){
 			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
 			MQTT_read_time+= 10;// cada 20 seg
-            MQTT_Read();
+            // MQTT_Read();
             WAIT_S(1);
 		}
         if ((pdTICKS_TO_MS(xTaskGetTickCount())/1000) >= OTA_md_time){
@@ -498,7 +523,8 @@ static void Main_Task(void* pvParameters){
 			OTA_Modem_Check();
 			printf("Siguiente ciclo en 60 segundos\r\n");
 			printf("OTA CHECK tomo %lu segundos\r\n",(pdTICKS_TO_MS(xTaskGetTickCount())/1000-current_time));
-			vTaskDelay(100);
+			current_time=pdTICKS_TO_MS(xTaskGetTickCount())/1000;
+            vTaskDelay(100);
 		}
 
         if(Modem_check_AT()!=MD_AT_OK){
@@ -537,6 +563,8 @@ void app_main(void){
         break;
     }
 
+
+
     // check if an OTA has been done, if so run diagnostics
     esp_ota_img_states_t ota_state;
     if (esp_ota_get_state_partition(partition, &ota_state) == ESP_OK) {
@@ -552,27 +580,24 @@ void app_main(void){
         }
     }
 
+
     /*--- Initialize NVS ---*/
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-    
+    Init_NVS_Keys();
+
     // Init Modem params
     main_cfg_parms();
     Modem_config();
 
     // INIT OTA BLE 
-    xTaskCreate(Modem_rx_task, "M95_rx_task", 1024*4, NULL, configMAX_PRIORITIES -1,&UART_task_handle);    // active service
-    xTaskCreate(ble_control_task, "BLE_Ctrl_Task", 1024*4, NULL, configMAX_PRIORITIES-2,&BLE_Task_handle);
+    init_ota_ble();
+    WAIT_S(2);
 
+     // INIT UART TASK 
+    xTaskCreate(Modem_rx_task, "M95_rx_task", 1024*4, NULL, configMAX_PRIORITIES -1,&UART_task_handle);    // active service
+    
     ret_main = Active_modem();
     if(ret_main != MD_CFG_SUCCESS) esp_restart();
-
 	ESP_LOGW(TAG,"-->> END CONFIG <<--\n");
-
     ret_update_time=Modem_update_time(3);
     ESP_LOGI(TAG, "RET update time: %d",ret_update_time);
     time(&data_modem.time);
@@ -608,5 +633,7 @@ void app_main(void){
    
 
     xTaskCreate(Main_Task,"Main_Task",1024*8,NULL,10,&MAIN_task_handle);
+    xTaskCreate(M95_Watchdog,"M95_Watchdog",2048, NULL,11,NULL);
+
 }
 
