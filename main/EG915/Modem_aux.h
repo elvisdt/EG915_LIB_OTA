@@ -20,6 +20,17 @@ void add_line(data_sms_strt_t* ds, const char* line);
 
 int str_to_data_sms(const char* input_string, data_sms_strt_t* data);
 
+/**
+ * Elimina todas las ocurrencias de un carácter específico de una cadena de texto.
+ *
+ * Esta función recorre la cadena de texto especificada y elimina todas las ocurrencias
+ * del carácter especificado, dejando la cadena modificada sin ese carácter.
+ *
+ * @param cadena La cadena de texto de la cual se eliminarán los caracteres.
+ * @param caracter El carácter que se desea eliminar de la cadena.
+ */
+void remove_char(char *cadena, char caracter);
+
 void remove_spaces(char* str);
 
 void remove_newlines(char* str);
@@ -35,10 +46,10 @@ void str_to_uppercase(char *str);
  * @param phone Puntero al buffer donde se almacenará el número de teléfono extraído.
  *
  * @return
- *     - ESP_OK si se encuentra y extrae correctamente el número de teléfono.
- *     - ESP_FAIL si no se puede encontrar el número de teléfono en la cadena de entrada o si hay algún error.
+ *     - 0 si se encuentra y extrae correctamente el número de teléfono.
+ *     - -1 si no se puede encontrar el número de teléfono en la cadena de entrada o si hay algún error.
  */
-int find_phone_and_extract(const char* input_string, char* phone);
+int find_phone_and_extract(char* input_string, char* phone);
 
 
 /**

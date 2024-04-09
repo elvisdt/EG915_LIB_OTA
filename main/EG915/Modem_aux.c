@@ -43,7 +43,18 @@ int str_to_data_sms(const char* input_string, data_sms_strt_t* data) {
     return 0;
 }
 
-
+void remove_char(char *cadena, char caracter) {
+    char *src, *dst;
+    src = dst = cadena;
+    while (*src) {
+        if (*src != caracter) {
+            *dst++ = *src;
+        }
+        src++;
+    }
+    *dst = '\0';
+    return;
+}
 
 void remove_spaces(char* str) {
     char* i = str;
@@ -81,21 +92,22 @@ void str_to_uppercase(char *str) {
 }
 
 
-int find_phone_and_extract(const char* input_string, char* phone) {
+int find_phone_and_extract(char* input_string, char* phone) {
     // Busca el parámetro en el string
-    char* found = strstr(input_string, ",");
-    if (found != NULL) {
-        // Encuentra la posición de la primera coma después del parámetro
-        char* first_comma = found;
-        // Encuentra la posición de la segunda coma después del parámetro
-        char* second_comma = strchr(first_comma + 1, ',');
-        if (second_comma != NULL) {
-            // Extrae el valor entre las comas
-            int value_length = second_comma - first_comma - 1;
-            strncpy(phone, first_comma + 1, value_length);
-            phone[value_length] = '\0';
-            return 0; // OK
+    char *token;
+    // Utiliza strtok para dividir la cadena en tokens usando la coma como separador
+
+    token = strtok(input_string, ",");
+    while (token != NULL) {
+        // Imprime cada token (parte entre las comas)
+        // printf("Parte: %s\n",  token);
+        if(strstr(token,"\"+")){
+            strcpy(phone,token);
+            remove_char(phone, '\"');
+            printf("found token: %s\r\n",phone);
+            return 0;//OK
         }
+        token = strtok(NULL, ","); // Siguiente token
     }
     return -1; // FAIL
 }

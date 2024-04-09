@@ -16,7 +16,7 @@
 #define WAIT_MS(x)		vTaskDelay(pdMS_TO_TICKS(x))
 #define WAIT_S(x)		vTaskDelay(pdMS_TO_TICKS(x*1e3))
 
-#define DEBUG_MODEM		0 // 0 -> NO DEBUG, 1-> DEBUG
+#define DEBUG_MODEM		0// 0 -> NO DEBUG, 1-> DEBUG
 
 // Definimos las funciones en la libreria
 const char * TAG = "EG915";
@@ -850,7 +850,7 @@ int Modem_Mqtt_Sub_Topic(int idx, char* topic_name, char* response){
 	memset(response,'\0',strlen(response));
 
 	sprintf(buff_send,"AT+QMTSUB=%d,1,\"%s\",0\r\n",idx,topic_name);
-	int success =sendAT(buff_send,"+QMTRECV:","ERROR\r\n",20000,buff_reciv);
+	int success =sendAT(buff_send,"+QMTRECV:","ERROR\r\n",00000,buff_reciv);
 
 	//printf("buf data reciv: %s\r\n",buff_reciv);
     if(success != MD_AT_OK){
@@ -861,18 +861,19 @@ int Modem_Mqtt_Sub_Topic(int idx, char* topic_name, char* response){
 	// +QMTRECV: <client_idx>,<msgid>,<topic>[,<payload_len>],<payload>
 	// "+QMTRECV: 0,0,\"OTA/868695060088992/CONFIG\",17,\"{\"value\":278}\""
 	int payload_len;
+	printf("data read: %s\n\n",buff_reciv);
+
 	// Utiliza sscanf para extraer el valor de payload_len
 	if (sscanf(buff_reciv, "\r\n+QMTRECV: %*d,%*d,%*[^,],%d,", &payload_len) == 1) {
+		printf("len pylad: %d\r\n",payload_len);
 		extraer_ultimos(buff_reciv, (payload_len+4), response);
 		remove_spaces(response);
-
 		// eliminar las comillas del el primero y ultimo valor
     	size_t longitud = strlen(response);
         if (longitud>2){
 			strncpy(response, response + 1, longitud - 2);
         	response[longitud - 2] = '\0';
 		}
-
         //printf("DATA EXTRACT: %s\n", response);
 		return MD_CFG_SUCCESS;
 	}
@@ -887,26 +888,50 @@ int Modem_Mqtt_Sub_Topic(int idx, char* topic_name, char* response){
 
 int Modem_SMS_Read(char* mensaje, char *numero){
 	int ret = 0;
+	
+	sendAT("AT+CPMS=?\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
+	WAIT_MS(100);
+
+	sendAT("AT+CPMS?\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
+	WAIT_MS(100);
+
 	ret = sendAT("AT+CMGF=1\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
 	WAIT_MS(100);
-	
+
 	ret = sendAT("AT+CMGL=?\r\n","OK","ERROR\r\n",1000,buff_reciv);
 	WAIT_MS(100);
 	if (ret !=MD_AT_OK)	return MD_CFG_FAIL;
 	
-	ret = sendAT("AT+CMGL=\"REC UNREAD\"\r\n","+CMGL: ","ERROR",1000,buff_reciv);
+	ret = sendAT("AT+CMGL=\"REC UNREAD\"\r\n","OK\r\n","ERROR",1000,buff_reciv);
 	WAIT_MS(100);
-	if (ret !=MD_AT_OK) return MD_SMS_READ_NO_FOUND;
+	if (ret !=MD_AT_OK) return MD_CFG_FAIL;
 
-	// printf("%s\n",buff_reciv);
+	//CMGR
+
+	// verifica la lista de mensajes
+	if (strstr(buff_reciv,"+CMGL:")==NULL){
+		// en caso no encontrar retorna no encontrado
+		return MD_SMS_READ_NO_FOUND;
+	}
+	// continuar para procesar
+	printf("RECIV SMS: %s\n",buff_reciv);
 	data_sms_strt_t sms_data;
 	ret = str_to_data_sms(buff_reciv,&sms_data);
 
-	 if (sms_data.lines >= 2){
+	// leer lo de la memoria 0,
+	sendAT("AT+CMGR=0\r\n","OK\r\n","ERROR",1000,buff_reciv);
+	WAIT_MS(100);
+
+	// leer lo de la memoria 1
+	sendAT("AT+CMGR=1\r\n","OK\r\n","ERROR",1000,buff_reciv);
+	WAIT_MS(100);
+	
+	if (sms_data.lines >= 2){
 		//line 0
 		if (find_phone_and_extract(sms_data.data[0], numero) == 0) {
             #if DEBUG_MODEM
-            	ESP_LOGW(TAG, "phone:%s", numero);
+
+            	ESP_LOGW(TAG, "phone: %s", numero);
             #endif
         }else{
 			free_data(&sms_data);
@@ -915,7 +940,7 @@ int Modem_SMS_Read(char* mensaje, char *numero){
 		// line 1
         strcpy(mensaje, sms_data.data[1]);
         #if DEBUG_MODEM
-        	ESP_LOGW(TAG, "msg:%s", mensaje);
+        	ESP_LOGW(TAG, "msg: %s", mensaje);
         #endif
         free_data(&sms_data);
         return MD_SMS_READ_FOUND;
@@ -923,12 +948,17 @@ int Modem_SMS_Read(char* mensaje, char *numero){
 		 free_data(&sms_data);
 		 return MD_SMS_READ_UNKOWN;
 	 }
+	 
 }
 
 
 int Modem_SMS_Send(char* mensaje, char *numero){
 	int ret = 0;
 	memset(buff_send, '\0',strlen(buff_send));
+	
+	ret = sendAT("AT+CMGF=1\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
+	WAIT_MS(100);
+
 	sprintf(buff_send,"AT+CMGS=\"%s\"\r\n",numero);
 	ret = sendAT(buff_send,">", "ERROR\r\n", 5000,buff_reciv);
 	if (ret !=MD_AT_OK)	return MD_CFG_FAIL;
@@ -937,10 +967,8 @@ int Modem_SMS_Send(char* mensaje, char *numero){
 	sprintf(buff_send, "%s%c", mensaje,26); // sms + 'Ctrl+Z'
 	uart_flush(modem_uart.uart_num);
 	uart_write_bytes(modem_uart.uart_num, buff_send, strlen(buff_send));
-	uart_wait_tx_done(modem_uart.uart_num, pdMS_TO_TICKS(100000));
-	WAIT_MS(100);
-
-	ret = readAT("+CMGS", "ERROR", 10000, buff_reciv);
+	uart_wait_tx_done(modem_uart.uart_num, pdMS_TO_TICKS(120000));
+	ret = readAT("+CMGS", "ERROR", 20000, buff_reciv);
 	if (ret == MD_AT_OK){
 		return MD_SMS_SEND_OK;
 	}
@@ -950,9 +978,13 @@ int Modem_SMS_Send(char* mensaje, char *numero){
 
 int Modem_SMS_delete(){
 	int ret = 0;
-	ret = sendAT("AT+CMGF=1\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
+	//ret = sendAT("AT+CMGR=1\r\n","OK\r\n","ERROR",1000,buff_reciv);
+
+	ret = sendAT("AT+CMGD=0,4\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
 	vTaskDelay(pdMS_TO_TICKS(200));
 	ret = sendAT("AT+CMGD=1,4\r\n","OK\r\n","ERROR\r\n",5000,buff_reciv);
+	vTaskDelay(pdMS_TO_TICKS(200));
+
 	return ret; //MD_AT_OK, MD_AT_ERROR, MD_AT_TIMEOUT
 }
 
