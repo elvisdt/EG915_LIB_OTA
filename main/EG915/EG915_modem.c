@@ -16,7 +16,7 @@
 #define WAIT_MS(x)		vTaskDelay(pdMS_TO_TICKS(x))
 #define WAIT_S(x)		vTaskDelay(pdMS_TO_TICKS(x*1e3))
 
-#define DEBUG_MODEM		0// 0 -> NO DEBUG, 1-> DEBUG
+#define DEBUG_MODEM		1// 0 -> NO DEBUG, 1-> DEBUG
 
 // Definimos las funciones en la libreria
 const char * TAG = "EG915";
@@ -222,7 +222,7 @@ int Modem_turn_ON(){
 
 int Modem_check_AT(){
 	int ret = 0;
-	ESP_LOGI(TAG, "CHECK COMMAND AT");
+	// ESP_LOGI(TAG, "CHECK COMMAND AT");
 	uart_flush(modem_uart.uart_num);
 
 	WAIT_MS(500);

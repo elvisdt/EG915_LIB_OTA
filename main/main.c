@@ -49,7 +49,7 @@
 #define WAIT_MS(x)		vTaskDelay(pdMS_TO_TICKS(x))
 #define WAIT_S(x)		vTaskDelay(pdMS_TO_TICKS(x*1e3))
 
-#define MASTER_TOPIC_MQTT   "OTA"
+#define MASTER_TOPIC_MQTT   "TEST-EG915"
 
 /***********************************************
  * STRUCTURES
