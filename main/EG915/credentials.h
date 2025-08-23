@@ -9,10 +9,6 @@
 #include <stdarg.h>
 
 
-#define UDP_CONNECTION
-// #define TCP_CONNECTION
-// #define MQTT_CONNECTION
-
 
 //#define APN     "smglobal.entel.pe" //
 
@@ -24,15 +20,15 @@
 /**
  * OTA: defined OTA parameters
 */
-#define ip_OTA      "18.229.227.108"
-#define port_OTA    "65431"  
+#define ip_OTA      "your_ip_server_tcp"
+#define port_OTA    "your_port_server_tcp"  
 
 
 /**
  * MQTT: defined MQTT parameters
 */
-#define ip_MQTT     "161.97.102.234" //"3.129.163.139" //"34.176.125.182"//
-#define port_MQTT   "1883"
+#define ip_MQTT     "ip_borker_mqtt"
+#define port_MQTT   "port_borker_mqtt"
 
 
 
